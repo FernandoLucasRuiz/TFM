@@ -39,7 +39,8 @@ geneset_alz <- tab$Symbol[tab$PathwayID=="hsa05010"]
 
 ```
 
-escribo para git
+escribo para github
+ahora escribo esto para subirlo a github.com repositorio
 
 ```{r}
 es

@@ -1754,46 +1754,18 @@ display: none;
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuc2V0d2QoXFwvVXNlcnMvZmVybmFuZG9sdWNhc3J1aXovTGlicmFyeS9DbG91ZFN0b3JhZ2UvT25lRHJpdmUtVU5JVkVSU0lEQURERU1VUkNJQS9Eb2N1bWVudG9zL0Zlcm5hbmRvL01hc3RlciBCaW9pbmZvcm1hdGljYS9URk1cXClcbmBgYFxuYGBgIn0= -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuYGBgclxuc2V0d2QoXFwvVXNlcnMvZmVybmFuZG9sdWNhc3J1aXovTGlicmFyeS9DbG91ZFN0b3JhZ2UvT25lRHJpdmUtVU5JVkVSU0lEQURERU1VUkNJQS9Eb2N1bWVudG9zL0Zlcm5hbmRvL01hc3RlciBCaW9pbmZvcm1hdGljYS9URk1cXClcbmBgYFxuYGBgXG5gYGAifQ== -->
 <pre class="r"><code>```r
-setwd(\/Users/fernandolucasruiz/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM\)</code></pre>
-<pre><code>
-&lt;!-- rnb-source-end --&gt;
-
-&lt;!-- rnb-chunk-end --&gt;
-
-
-&lt;!-- rnb-text-begin --&gt;
-
-
-
-&lt;!-- rnb-text-end --&gt;
-
-
-&lt;!-- rnb-chunk-begin --&gt;
-
-
-&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeShsaW1tYSlcbmxpYnJhcnkoQW5ub3RhdGlvbkRiaSlcbmBgYCJ9 --&gt;
-
 ```r
-library(limma)
-library(AnnotationDbi)</code></pre>
+setwd(\/Users/fernandolucasruiz/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM\)</code></pre>
+<pre><code></code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-output-begin eyJkYXRhIjoiV2FybmluZzogcGFja2FnZSDigJhBbm5vdGF0aW9uRGJp4oCZIHdhcyBidWlsdCB1bmRlciBSIHZlcnNpb24gNC4zLjFXYXJuaW5nOiBwYWNrYWdlIOKAmElSYW5nZXPigJkgd2FzIGJ1aWx0IHVuZGVyIFIgdmVyc2lvbiA0LjMuMVdhcm5pbmc6IHBhY2thZ2Ug4oCYUzRWZWN0b3Jz4oCZIHdhcyBidWlsdCB1bmRlciBSIHZlcnNpb24gNC4zLjFcbiJ9 -->
 <pre><code>Warning: package ‘AnnotationDbi’ was built under R version 4.3.1Warning: package ‘IRanges’ was built under R version 4.3.1Warning: package ‘S4Vectors’ was built under R version 4.3.1</code></pre>
 <!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxubGlicmFyeShvcmcuSHMuZWcuZGIpXG5gYGAifQ== -->
-<pre class="r"><code>library(org.Hs.eg.db)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-chunk-end -->
-<!-- rnb-text-begin -->
-<!-- rnb-text-end -->
-<!-- rnb-chunk-begin -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuUk9TTUFQX1JJTlBNSUFHRVNFWF9jb3ZzIDwtIHJlYWRSRFMoXFx+L0xpYnJhcnkvQ2xvdWRTdG9yYWdlL09uZURyaXZlLVVOSVZFUlNJREFEREVNVVJDSUEvRG9jdW1lbnRvcy9GZXJuYW5kby9NYXN0ZXIgQmlvaW5mb3JtYXRpY2EvVEZNL2RhdG9zL1JPU01BUF9SSU5QTUlBR0VTRVhfY292cy5yZHNcXClcblxuUk9TTUFQX1JJTlBNSUFHRVNFWF9yZXNpZHMgPC0gcmVhZFJEUyhcXH4vTGlicmFyeS9DbG91ZFN0b3JhZ2UvT25lRHJpdmUtVU5JVkVSU0lEQURERU1VUkNJQS9Eb2N1bWVudG9zL0Zlcm5hbmRvL01hc3RlciBCaW9pbmZvcm1hdGljYS9URk0vZGF0b3MvUk9TTUFQX1JJTlBNSUFHRVNFWF9yZXNpZHMucmRzXFwpXG5gYGBcbmBgYCJ9 -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxubGlicmFyeShvcmcuSHMuZWcuZGIpXG5gYGBcbmBgYCJ9 -->
 <pre class="r"><code>```r
-ROSMAP_RINPMIAGESEX_covs &lt;- readRDS(\~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_covs.rds\)
-
-ROSMAP_RINPMIAGESEX_resids &lt;- readRDS(\~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_resids.rds\)</code></pre>
+library(org.Hs.eg.db)</code></pre>
 <pre><code>
 &lt;!-- rnb-source-end --&gt;
 
@@ -1810,7 +1782,74 @@ ROSMAP_RINPMIAGESEX_resids &lt;- readRDS(\~/Library/CloudStorage/OneDrive-UNIVER
 &lt;!-- rnb-chunk-begin --&gt;
 
 
-&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBnZW5lc2V0IGRlIEFsemhlaW1lciBleHRyYWlkb3MgZGUgS0VHR1xuXG4jIGxpYnJhcnkobGltbWEpXG4jIGxpYnJhcnkoQW5ub3RhdGlvbkRiaSlcbiMgbGlicmFyeShvcmcuSHMuZWcuZGIpXG5cbnRhYiA8LSBnZXRHZW5lS0VHR0xpbmtzKHNwZWNpZXM9XCJoc2FcIilcbnRhYiRTeW1ib2wgPC0gbWFwSWRzKG9yZy5Icy5lZy5kYiwgdGFiJEdlbmVJRCxcbiAgICAgICAgICAgICAgICAgICAgICAgY29sdW1uPVwiU1lNQk9MXCIsIGtleXR5cGU9XCJFTlRSRVpJRFwiKVxuYGBgIn0= --&gt;
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuYGBgclxuUk9TTUFQX1JJTlBNSUFHRVNFWF9jb3ZzIDwtIHJlYWRSRFMoXFx+L0xpYnJhcnkvQ2xvdWRTdG9yYWdlL09uZURyaXZlLVVOSVZFUlNJREFEREVNVVJDSUEvRG9jdW1lbnRvcy9GZXJuYW5kby9NYXN0ZXIgQmlvaW5mb3JtYXRpY2EvVEZNL2RhdG9zL1JPU01BUF9SSU5QTUlBR0VTRVhfY292cy5yZHNcXClcblxuUk9TTUFQX1JJTlBNSUFHRVNFWF9yZXNpZHMgPC0gcmVhZFJEUyhcXH4vTGlicmFyeS9DbG91ZFN0b3JhZ2UvT25lRHJpdmUtVU5JVkVSU0lEQURERU1VUkNJQS9Eb2N1bWVudG9zL0Zlcm5hbmRvL01hc3RlciBCaW9pbmZvcm1hdGljYS9URk0vZGF0b3MvUk9TTUFQX1JJTlBNSUFHRVNFWF9yZXNpZHMucmRzXFwpXG5gYGBcbmBgYFxuYGBgIn0= --&gt;
+
+```r
+```r
+```r
+ROSMAP_RINPMIAGESEX_covs &lt;- readRDS(\~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_covs.rds\)
+
+ROSMAP_RINPMIAGESEX_resids &lt;- readRDS(\~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_resids.rds\)</code></pre>
+<pre><code></code></pre>
+<!-- rnb-source-end -->
+<!-- rnb-output-begin eyJkYXRhIjoiJ3NlbGVjdCgpJyByZXR1cm5lZCAxOjEgbWFwcGluZyBiZXR3ZWVuIGtleXMgYW5kIGNvbHVtbnNcbiJ9 -->
+<pre><code>&#39;select()&#39; returned 1:1 mapping between keys and columns</code></pre>
+<!-- rnb-output-end -->
+<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxucGF0aHMgPC0gZ2V0S0VHR1BhdGh3YXlOYW1lcyhzcGVjaWVzPVxcaHNhXFwpXG5wYXRoc1twYXRocyRQYXRod2F5SUQ9PVxcaHNhMDUwMTBcXCwgXVxuYGBgXG5gYGByXG5nZW5lc2V0X2FseiA8LSB0YWIkU3ltYm9sW3RhYiRQYXRod2F5SUQ9PVxcaHNhMDUwMTBcXF1cblxuYGBgXG5gYGAifQ== -->
+<pre class="r"><code>```r
+paths &lt;- getKEGGPathwayNames(species=\hsa\)
+paths[paths$PathwayID==\hsa05010\, ]</code></pre>
+<pre class="r"><code>geneset_alz &lt;- tab$Symbol[tab$PathwayID==\hsa05010\]
+</code></pre>
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-frame-begin eyJtZXRhZGF0YSI6eyJjbGFzc2VzIjoiZGF0YS5mcmFtZSIsIm5yb3ciOjEsIm5jb2wiOjIsInN1bW1hcnkiOltdfSwicmRmIjoiSDRzSUFBQUFBQUFBQTIxUVRVdkVNQkNkZm1vcnE0Si9vTWYxMEZLUkJhOUMwZlVtb3JEWHNZM2JZSnVVSkhYVkg3K2FkaE9RNENISnl4dmV2RGZ6VkcydTAwMEtBQUdFZ2I0akRTRjZlYjdMYndCQ1gzODhDQ0daM2s5ZHZ0QmdJcy8vRkk1YmllV3F2Q29kZm5uYmZiZUU5a1JrRFpVRUpjbnliTTE3bmtrY0tHRXlXN1pqait6U01Zb1k5a1NhWnI0aGswZFU3UTYvSGlwRG5GUkUxb0lPaW5MbU5FZ0UzeFcyeVdJdWdIZnZ1dFFkU3VsRVRodFVXTHdKcmRXL3ZTTTU0ck9iRnZuVEhtSkg3QW1IT0J2WmxLTEo2M1prNy9uS0tRY0QyMDZlaDREeldmeUQvVU1LLzhmSVl5T1BDZHRTUnV3NEhiNlN6blp1eUllQnAzb1g4eXFLUVZDbTdKeWFsWVhpQ3Ewa3JYbG5tWGx5MlA4Q3BITStpQndDQUFBPSJ9 --&gt;
+
+&lt;div data-pagedtable=&quot;false&quot;&gt;
+  &lt;script data-pagedtable-source type=&quot;application/json&quot;&gt;
+{&quot;columns&quot;:[{&quot;label&quot;:[&quot;&quot;],&quot;name&quot;:[&quot;_rn_&quot;],&quot;type&quot;:[&quot;&quot;],&quot;align&quot;:[&quot;left&quot;]},{&quot;label&quot;:[&quot;PathwayID&quot;],&quot;name&quot;:[1],&quot;type&quot;:[&quot;chr&quot;],&quot;align&quot;:[&quot;left&quot;]},{&quot;label&quot;:[&quot;Description&quot;],&quot;name&quot;:[2],&quot;type&quot;:[&quot;chr&quot;],&quot;align&quot;:[&quot;left&quot;]}],&quot;data&quot;:[{&quot;1&quot;:&quot;hsa05010&quot;,&quot;2&quot;:&quot;Alzheimer disease - Homo sapiens (human)&quot;,&quot;_rn_&quot;:&quot;327&quot;}],&quot;options&quot;:{&quot;columns&quot;:{&quot;min&quot;:{},&quot;max&quot;:[10],&quot;total&quot;:[2]},&quot;rows&quot;:{&quot;min&quot;:[10],&quot;max&quot;:[10],&quot;total&quot;:[1]},&quot;pages&quot;:{}}}
+  &lt;/script&gt;
+&lt;/div&gt;
+
+&lt;!-- rnb-frame-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuYGBgclxuZXNcbmBgYFxuYGBgIn0= --&gt;
+
+```r
+```r
+es</code></pre>
+<pre><code>
+&lt;!-- rnb-source-end --&gt;
+
+&lt;!-- rnb-chunk-end --&gt;
+
+
+&lt;!-- rnb-text-begin --&gt;
+
+
+
+&lt;!-- rnb-text-end --&gt;
+
+
+&lt;!-- rnb-chunk-begin --&gt;
+
+
+&lt;!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuIyBnZW5lc2V0IGRlIEFsemhlaW1lciBleHRyYWlkb3MgZGUgS0VHR1xuXG4jIGxpYnJhcnkobGltbWEpXG4jIGxpYnJhcnkoQW5ub3RhdGlvbkRiaSlcbiMgbGlicmFyeShvcmcuSHMuZWcuZGIpXG5cbnRhYiA8LSBnZXRHZW5lS0VHR0xpbmtzKHNwZWNpZXM9XCJoc2FcIilcbnRhYiRTeW1ib2wgPC0gbWFwSWRzKG9yZy5Icy5lZy5kYiwgdGFiJEdlbmVJRCxcbiAgICAgICAgICAgICAgICAgICAgICAgY29sdW1uPVwiU1lNQk9MXCIsIGtleXR5cGU9XCJFTlRSRVpJRFwiKVxuXG5wYXRocyA8LSBnZXRLRUdHUGF0aHdheU5hbWVzKHNwZWNpZXM9XCJoc2FcIilcbnBhdGhzW3BhdGhzJFBhdGh3YXlJRD09XCJoc2EwNTAxMFwiLCBdXG5nZW5lc2V0X2FseiA8LSB0YWIkU3ltYm9sW3RhYiRQYXRod2F5SUQ9PVwiaHNhMDUwMTBcIl1cblxuYGBgIn0= --&gt;
 
 ```r
 # geneset de Alzheimer extraidos de KEGG
@@ -1821,29 +1860,17 @@ ROSMAP_RINPMIAGESEX_resids &lt;- readRDS(\~/Library/CloudStorage/OneDrive-UNIVER
 
 tab &lt;- getGeneKEGGLinks(species=&quot;hsa&quot;)
 tab$Symbol &lt;- mapIds(org.Hs.eg.db, tab$GeneID,
-                       column=&quot;SYMBOL&quot;, keytype=&quot;ENTREZID&quot;)</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-output-begin eyJkYXRhIjoiJ3NlbGVjdCgpJyByZXR1cm5lZCAxOjEgbWFwcGluZyBiZXR3ZWVuIGtleXMgYW5kIGNvbHVtbnNcbiJ9 -->
-<pre><code>&#39;select()&#39; returned 1:1 mapping between keys and columns</code></pre>
-<!-- rnb-output-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxucGF0aHMgPC0gZ2V0S0VHR1BhdGh3YXlOYW1lcyhzcGVjaWVzPVwiaHNhXCIpXG5wYXRoc1twYXRocyRQYXRod2F5SUQ9PVwiaHNhMDUwMTBcIiwgXVxuYGBgIn0= -->
-<pre class="r"><code>paths &lt;- getKEGGPathwayNames(species=&quot;hsa&quot;)
-paths[paths$PathwayID==&quot;hsa05010&quot;, ]</code></pre>
-<!-- rnb-source-end -->
-<!-- rnb-frame-begin eyJtZXRhZGF0YSI6eyJjbGFzc2VzIjpbImRhdGEuZnJhbWUiXSwibnJvdyI6MSwibmNvbCI6Miwic3VtbWFyeSI6W119LCJyZGYiOiJINHNJQUFBQUFBQUFBMjFRVFV2RU1CQ2RmbW9ycTRKL29NZjEwRktSQmE5QzBmVW1vckRYc1kzYllKdVVKSFhWSDcrYWRoT1E0Q0hKeXh2ZXZEZnpWRzJ1MDAwS0FBR0VnYjRqRFNGNmViN0xid0JDWDM4OENDR1ozazlkdnRCZ0lzLy9GSTViaWVXcXZDb2Rmbm5iZmJlRTlrUmtEWlVFSmNueWJNMTdua2tjS0dFeVc3WmpqK3pTTVlvWTlrU2FacjRoazBkVTdRNi9IaXBEbkZSRTFvSU9pbkxtTkVnRTN4VzJ5V0l1Z0hmdnV0UWRTdWxFVGh0VVdMd0pyZFcvdlNNNTRyT2JGdm5USG1KSDdBbUhPQnZabEtMSjYzWms3L25LS1FjRDIwNmVoNER6V2Z5RC9VTUsvOGZJWXlPUENkdFNSdXc0SGI2U3puWnV5SWVCcDNvWDh5cUtRVkNtN0p5YWxZWGlDcTBrclhsbm1YbHkyUDhDcEhNK2lCd0NBQUE9In0= -->
-<div data-pagedtable="false">
-<script data-pagedtable-source type="application/json">
-{"columns":[{"label":[""],"name":["_rn_"],"type":[""],"align":["left"]},{"label":["PathwayID"],"name":[1],"type":["chr"],"align":["left"]},{"label":["Description"],"name":[2],"type":["chr"],"align":["left"]}],"data":[{"1":"hsa05010","2":"Alzheimer disease - Homo sapiens (human)","_rn_":"327"}],"options":{"columns":{"min":{},"max":[10],"total":[2]},"rows":{"min":[10],"max":[10],"total":[1]},"pages":{}}}
-  </script>
-</div>
-<!-- rnb-frame-end -->
-<!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZ2VuZXNldF9hbHogPC0gdGFiJFN5bWJvbFt0YWIkUGF0aHdheUlEPT1cImhzYTA1MDEwXCJdXG5cbmBgYCJ9 -->
-<pre class="r"><code>geneset_alz &lt;- tab$Symbol[tab$PathwayID==&quot;hsa05010&quot;]
+                       column=&quot;SYMBOL&quot;, keytype=&quot;ENTREZID&quot;)
+
+paths &lt;- getKEGGPathwayNames(species=&quot;hsa&quot;)
+paths[paths$PathwayID==&quot;hsa05010&quot;, ]
+geneset_alz &lt;- tab$Symbol[tab$PathwayID==&quot;hsa05010&quot;]
 </code></pre>
 <!-- rnb-source-end -->
 <!-- rnb-chunk-end -->
 <!-- rnb-text-begin -->
-<p>escribo para git</p>
+<p>escribo para github ahora escribo esto para subirlo a github.com
+repositorio</p>
 <!-- rnb-text-end -->
 <!-- rnb-chunk-begin -->
 <!-- rnb-source-begin eyJkYXRhIjoiYGBgclxuZXNcbmBgYCJ9 -->
@@ -1853,7 +1880,7 @@ paths[paths$PathwayID==&quot;hsa05010&quot;, ]</code></pre>
 <!-- rnb-text-begin -->
 <!-- rnb-text-end -->
 
-<div id="rmd-source-code">LS0tCnRpdGxlOiAiVEZNIEFsemhlaW1lciIKb3V0cHV0OiBodG1sX25vdGVib29rCi0tLQoKYGBge3J9CnNldHdkKCIvVXNlcnMvZmVybmFuZG9sdWNhc3J1aXovTGlicmFyeS9DbG91ZFN0b3JhZ2UvT25lRHJpdmUtVU5JVkVSU0lEQURERU1VUkNJQS9Eb2N1bWVudG9zL0Zlcm5hbmRvL01hc3RlciBCaW9pbmZvcm1hdGljYS9URk0iKQpgYGAKCmBgYHtyLCBtZXNzYWdlPUZBTFNFfQpsaWJyYXJ5KGxpbW1hKQpsaWJyYXJ5KEFubm90YXRpb25EYmkpCmxpYnJhcnkob3JnLkhzLmVnLmRiKQpgYGAKCgpgYGB7cn0KIyBjb3ZhcmlhYmxlcwpST1NNQVBfUklOUE1JQUdFU0VYX2NvdnMgPC0gcmVhZFJEUygifi9MaWJyYXJ5L0Nsb3VkU3RvcmFnZS9PbmVEcml2ZS1VTklWRVJTSURBRERFTVVSQ0lBL0RvY3VtZW50b3MvRmVybmFuZG8vTWFzdGVyIEJpb2luZm9ybWF0aWNhL1RGTS9kYXRvcy9ST1NNQVBfUklOUE1JQUdFU0VYX2NvdnMucmRzIikKCiNkYXRvcyBjb3JyZWdpZG9zIApST1NNQVBfUklOUE1JQUdFU0VYX3Jlc2lkcyA8LSByZWFkUkRTKCJ+L0xpYnJhcnkvQ2xvdWRTdG9yYWdlL09uZURyaXZlLVVOSVZFUlNJREFEREVNVVJDSUEvRG9jdW1lbnRvcy9GZXJuYW5kby9NYXN0ZXIgQmlvaW5mb3JtYXRpY2EvVEZNL2RhdG9zL1JPU01BUF9SSU5QTUlBR0VTRVhfcmVzaWRzLnJkcyIpCmBgYAoKYGBge3J9CiMgZ2VuZXNldCBkZSBBbHpoZWltZXIgZXh0cmFpZG9zIGRlIEtFR0cKCiMgbGlicmFyeShsaW1tYSkKIyBsaWJyYXJ5KEFubm90YXRpb25EYmkpCiMgbGlicmFyeShvcmcuSHMuZWcuZGIpCgp0YWIgPC0gZ2V0R2VuZUtFR0dMaW5rcyhzcGVjaWVzPSJoc2EiKQp0YWIkU3ltYm9sIDwtIG1hcElkcyhvcmcuSHMuZWcuZGIsIHRhYiRHZW5lSUQsCiAgICAgICAgICAgICAgICAgICAgICAgY29sdW1uPSJTWU1CT0wiLCBrZXl0eXBlPSJFTlRSRVpJRCIpCgpwYXRocyA8LSBnZXRLRUdHUGF0aHdheU5hbWVzKHNwZWNpZXM9ImhzYSIpCnBhdGhzW3BhdGhzJFBhdGh3YXlJRD09ImhzYTA1MDEwIiwgXQpnZW5lc2V0X2FseiA8LSB0YWIkU3ltYm9sW3RhYiRQYXRod2F5SUQ9PSJoc2EwNTAxMCJdCgpgYGAKCmVzY3JpYm8gcGFyYSBnaXQKCmBgYHtyfQplcwpgYGAKCg==</div>
+<div id="rmd-source-code">LS0tCnRpdGxlOiAiVEZNIEFsemhlaW1lciIKb3V0cHV0OiBodG1sX25vdGVib29rCi0tLQoKYGBge3J9CnNldHdkKCIvVXNlcnMvZmVybmFuZG9sdWNhc3J1aXovTGlicmFyeS9DbG91ZFN0b3JhZ2UvT25lRHJpdmUtVU5JVkVSU0lEQURERU1VUkNJQS9Eb2N1bWVudG9zL0Zlcm5hbmRvL01hc3RlciBCaW9pbmZvcm1hdGljYS9URk0iKQpgYGAKCmBgYHtyLCBtZXNzYWdlPUZBTFNFfQpsaWJyYXJ5KGxpbW1hKQpsaWJyYXJ5KEFubm90YXRpb25EYmkpCmxpYnJhcnkob3JnLkhzLmVnLmRiKQpgYGAKCgpgYGB7cn0KIyBjb3ZhcmlhYmxlcwpST1NNQVBfUklOUE1JQUdFU0VYX2NvdnMgPC0gcmVhZFJEUygifi9MaWJyYXJ5L0Nsb3VkU3RvcmFnZS9PbmVEcml2ZS1VTklWRVJTSURBRERFTVVSQ0lBL0RvY3VtZW50b3MvRmVybmFuZG8vTWFzdGVyIEJpb2luZm9ybWF0aWNhL1RGTS9kYXRvcy9ST1NNQVBfUklOUE1JQUdFU0VYX2NvdnMucmRzIikKCiNkYXRvcyBjb3JyZWdpZG9zIApST1NNQVBfUklOUE1JQUdFU0VYX3Jlc2lkcyA8LSByZWFkUkRTKCJ+L0xpYnJhcnkvQ2xvdWRTdG9yYWdlL09uZURyaXZlLVVOSVZFUlNJREFEREVNVVJDSUEvRG9jdW1lbnRvcy9GZXJuYW5kby9NYXN0ZXIgQmlvaW5mb3JtYXRpY2EvVEZNL2RhdG9zL1JPU01BUF9SSU5QTUlBR0VTRVhfcmVzaWRzLnJkcyIpCmBgYAoKYGBge3J9CiMgZ2VuZXNldCBkZSBBbHpoZWltZXIgZXh0cmFpZG9zIGRlIEtFR0cKCiMgbGlicmFyeShsaW1tYSkKIyBsaWJyYXJ5KEFubm90YXRpb25EYmkpCiMgbGlicmFyeShvcmcuSHMuZWcuZGIpCgp0YWIgPC0gZ2V0R2VuZUtFR0dMaW5rcyhzcGVjaWVzPSJoc2EiKQp0YWIkU3ltYm9sIDwtIG1hcElkcyhvcmcuSHMuZWcuZGIsIHRhYiRHZW5lSUQsCiAgICAgICAgICAgICAgICAgICAgICAgY29sdW1uPSJTWU1CT0wiLCBrZXl0eXBlPSJFTlRSRVpJRCIpCgpwYXRocyA8LSBnZXRLRUdHUGF0aHdheU5hbWVzKHNwZWNpZXM9ImhzYSIpCnBhdGhzW3BhdGhzJFBhdGh3YXlJRD09ImhzYTA1MDEwIiwgXQpnZW5lc2V0X2FseiA8LSB0YWIkU3ltYm9sW3RhYiRQYXRod2F5SUQ9PSJoc2EwNTAxMCJdCgpgYGAKCmVzY3JpYm8gcGFyYSBnaXRodWIKYWhvcmEgZXNjcmlibyBlc3RvIHBhcmEgc3ViaXJsbyBhIGdpdGh1Yi5jb20gcmVwb3NpdG9yaW8KCmBgYHtyfQplcwpgYGAKCg==</div>
 
 
 
