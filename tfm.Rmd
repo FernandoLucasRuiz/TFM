@@ -1,0 +1,47 @@
+---
+title: "TFM Alzheimer"
+output: html_notebook
+---
+
+```{r}
+setwd("/Users/fernandolucasruiz/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM")
+```
+
+```{r, message=FALSE}
+library(limma)
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+```
+
+
+```{r}
+# covariables
+ROSMAP_RINPMIAGESEX_covs <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_covs.rds")
+
+#datos corregidos 
+ROSMAP_RINPMIAGESEX_resids <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_resids.rds")
+```
+
+```{r}
+# geneset de Alzheimer extraidos de KEGG
+
+# library(limma)
+# library(AnnotationDbi)
+# library(org.Hs.eg.db)
+
+tab <- getGeneKEGGLinks(species="hsa")
+tab$Symbol <- mapIds(org.Hs.eg.db, tab$GeneID,
+                       column="SYMBOL", keytype="ENTREZID")
+
+paths <- getKEGGPathwayNames(species="hsa")
+paths[paths$PathwayID=="hsa05010", ]
+geneset_alz <- tab$Symbol[tab$PathwayID=="hsa05010"]
+
+```
+
+escribo para git
+
+```{r}
+es
+```
+
