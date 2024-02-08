@@ -11,15 +11,22 @@ setwd("/Users/fernandolucasruiz/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCI
 library(limma)
 library(AnnotationDbi)
 library(org.Hs.eg.db)
+
+library(VennDiagram)
+library(grid)
+
+
 ```
 
 
 ```{r}
 # covariables
 ROSMAP_RINPMIAGESEX_covs <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_covs.rds")
+covs <- ROSMAP_RINPMIAGESEX_covs
 
 #datos corregidos 
 ROSMAP_RINPMIAGESEX_resids <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_resids.rds")
+mat_exp <- ROSMAP_RINPMIAGESEX_resids
 ```
 
 ```{r}
@@ -39,9 +46,79 @@ geneset_alz <- tab$Symbol[tab$PathwayID=="hsa05010"]
 
 ```
 
-Ahora voy con el pull y conflicto
+Vamos a seleccionar solamente los genes de Alzheimer de KEGG en nuestro dataset
 
 ```{r}
-es
+mat_exp_alz_genes <- mat_exp[, colnames(mat_exp) %in% geneset_alz]
 ```
+
+
+Visualizamos si se han seleccionado todos los genes y cuantos del geneset de KEGG
+
+```{r}
+#library(VennDiagram)
+#library(grid)
+
+venn.plot <- venn.diagram(
+  x = list(GenesMatriz = colnames(mat_exp), GenesetAlzheimer = geneset_alz),
+  category.names = c("Matrix Genes", "Geneset Alzheimer"),
+  filename = NULL,
+  output = FALSE,  # Asegura que no se exporte a un archivo
+  fill = c("#00CED1", "#E9967A"),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = 25, #posicion de las categoricas
+  cat.dist = 0.1, #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0, #sin borde
+  main = "Alzheimer genes in ROSMAP",
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 1)
+)
+
+# Dibuja el diagrama de Venn generado
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+
+```
+
+
+
+Hacemos PCA de nuestra nueva matriz con los genes seleccionados de Alzheimer
+
+```{r}
+pca_alz_genes <- prcomp(mat_exp_alz_genes)
+```
+
+```{r}
+library(ggplot2)
+
+pca <-  as.data.frame(pca_alz_genes$x)
+pca <- cbind(covs, pca)
+# Gráfico de componentes principales para cada estado
+ggplot(pca, aes(PC1, PC2, color = as.factor(neuroStatus))) +
+  modelr::geom_ref_line(h = 0) +
+  modelr::geom_ref_line(v = 0) +
+  geom_point() +
+  #geom_text(aes(label = mrna_id), size = 3) +
+  xlab("First Principal Component") +
+  ylab("Second Principal Component") +
+  ggtitle("First Two Principal Components of Alzheimer ")
+```
+
+
+
+
+
+
+
+
+
+
+
 
