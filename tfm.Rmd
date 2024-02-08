@@ -8,6 +8,8 @@ setwd("/Users/fernandolucasruiz/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCI
 ```
 
 ```{r, message=FALSE}
+library(tidyverse)
+
 library(limma)
 library(AnnotationDbi)
 library(org.Hs.eg.db)
@@ -15,7 +17,7 @@ library(org.Hs.eg.db)
 library(VennDiagram)
 library(grid)
 
-
+library(ggplot2)
 ```
 
 
@@ -92,12 +94,10 @@ grid.draw(venn.plot)
 Hacemos PCA de nuestra nueva matriz con los genes seleccionados de Alzheimer
 
 ```{r}
-pca_alz_genes <- prcomp(mat_exp_alz_genes)
+pca_alz_genes <- prcomp(mat_exp_alz_genes, scale. = T)
 ```
 
 ```{r}
-library(ggplot2)
-
 pca <-  as.data.frame(pca_alz_genes$x)
 pca <- cbind(covs, pca)
 # Gráfico de componentes principales para cada estado
@@ -111,11 +111,41 @@ ggplot(pca, aes(PC1, PC2, color = as.factor(neuroStatus))) +
   ggtitle("First Two Principal Components of Alzheimer ")
 ```
 
+Seleccionamos muestras que esten 2 veces la desviacion tipica para la PC1
 
+```{r}
+outlierspc1 <- as.data.frame(pca_alz_genes$x[abs(pca_alz_genes$x[,1]) > 2*(pca_alz_genes$sdev[1]),1])
 
+outlierspc2 <- as.data.frame(pca_alz_genes$x[abs(pca_alz_genes$x[,2]) > 2*(pca_alz_genes$sdev[2]),2])
+```
 
+Las ploteamos 
 
+```{r}
+plot1 <- ggplot(df, aes(x = PC1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean(df$PC1) + 2*pca_alz_genes$sdev[1], linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(df$PC1) - 2*pca_alz_genes$sdev[1], linetype = "dashed", color = "blue") +
+  labs(title = "PC1 density with 2*SD") +
+  geom_text(data = outlierspc1, 
+            aes(x = outlierspc1[,1], y= 0, label = rownames(outlierspc1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(pca_alz_genes$x), aes(x= PC1, y = 0), color= ifelse(abs(pca_alz_genes$x[,1]) > 2*(pca_alz_genes$sdev[1]), "black", "grey")) +
+  theme_minimal()
 
+plot2 <- ggplot(df, aes(x = PC2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean(df$PC2) + 2*pca_alz_genes$sdev[2], linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(df$PC2) - 2*pca_alz_genes$sdev[2], linetype = "dashed", color = "blue") +
+  labs(title = "PC2 density with 2*SD") +
+  geom_text(data = outlierspc2, 
+            aes(x = outlierspc2[,1], y= 0, label = rownames(outlierspc2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(pca_alz_genes$x), aes(x= PC2, y = 0), color= ifelse(abs(pca_alz_genes$x[,2]) > 2*(pca_alz_genes$sdev[2]), "black", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1, plot2, ncol = 1)
+```
 
 
 
