@@ -18,6 +18,7 @@ library(VennDiagram)
 library(grid)
 
 library(ggplot2)
+library(gridExtra)
 ```
 
 
@@ -30,6 +31,11 @@ covs <- ROSMAP_RINPMIAGESEX_covs
 ROSMAP_RINPMIAGESEX_resids <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_resids.rds")
 mat_exp <- ROSMAP_RINPMIAGESEX_resids
 ```
+
+```{r}
+describe(covs)
+```
+
 
 ```{r}
 # geneset de Alzheimer extraidos de KEGG
@@ -77,7 +83,7 @@ venn.plot <- venn.diagram(
   rotation.degree = 0, 
   margin = 0.1, # hacerla más pequeña
   lwd=0, #sin borde
-  main = "Alzheimer genes in ROSMAP",
+  main = "Alzheimer genes in exp matrix",
   main.fontface= "bold", 
   main.cex = 2,
   main.pos = c(0.5, 1)
@@ -94,7 +100,36 @@ grid.draw(venn.plot)
 Hacemos PCA de nuestra nueva matriz con los genes seleccionados de Alzheimer
 
 ```{r}
-pca_alz_genes <- prcomp(mat_exp_alz_genes, scale. = T)
+pca_alz_genes <- prcomp(mat_exp_alz_genes)
+```
+
+```{r}
+var_exp <- pca_alz_genes$sdev^2
+prop_var_exp <- var_exp / sum(var_exp)
+cum_var_exp <- cumsum(prop_var_exp)
+
+df_var_exp <- data.frame(Comp = 1:length(prop_var_exp), VarExp = prop_var_exp)
+df_cum_var_exp <- data.frame(Comp = 1:length(cum_var_exp), CumVarExp = cum_var_exp)
+
+# Scree plot
+ggplot(df_var_exp[1:5,], aes(x = Comp, y = VarExp)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_line(aes(group = 1), color = "blue") +
+  geom_point(color = "blue") +
+  theme_minimal() +
+  labs(x = "Principal components", y = "Variance", title = "Scree Plot") +
+  ylim(c(0,1)) +
+  geom_line(data = df_cum_var_exp[1:5,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
+  geom_point(data = df_cum_var_exp[1:5,], aes(x = Comp, y = CumVarExp), color = "red") +
+  geom_bar(data = df_cum_var_exp[1:5,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
+  annotate("text", x = 4, y = 0.85, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
+  annotate("text", x = 4, y = 0.15, label = "Scree Plot", color = "blue", size = 4) +
+  annotate("text", x = 1, y = 0.73, label = "0.63%", color = "black", size = 3) +
+  annotate("text", x = 2, y = 0.98, label = "0.88%", color = "black", size = 3) +
+  annotate("text", x = 3, y = 1.00, label = "0.92%", color = "black", size = 3) +
+  annotate("text", x = 4, y = 1.00, label = "0.94%", color = "black", size = 3) +
+  annotate("text", x = 5, y = 1.00, label = "0.96%", color = "black", size = 3)
+
 ```
 
 ```{r}
@@ -122,6 +157,8 @@ outlierspc2 <- as.data.frame(pca_alz_genes$x[abs(pca_alz_genes$x[,2]) > 2*(pca_a
 Las ploteamos 
 
 ```{r}
+df <- as.data.frame(pca_alz_genes$x)
+
 plot1 <- ggplot(df, aes(x = PC1)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
   geom_vline(xintercept = mean(df$PC1) + 2*pca_alz_genes$sdev[1], linetype = "dashed", color = "blue") +
@@ -130,7 +167,7 @@ plot1 <- ggplot(df, aes(x = PC1)) +
   geom_text(data = outlierspc1, 
             aes(x = outlierspc1[,1], y= 0, label = rownames(outlierspc1)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
-  geom_rug(data = as.data.frame(pca_alz_genes$x), aes(x= PC1, y = 0), color= ifelse(abs(pca_alz_genes$x[,1]) > 2*(pca_alz_genes$sdev[1]), "black", "grey")) +
+  geom_rug(data = as.data.frame(pca_alz_genes$x), aes(x= PC1, y = 0), color= ifelse(abs(pca_alz_genes$x[,1]) > 2*(pca_alz_genes$sdev[1]), "#8B1A1A", "grey")) +
   theme_minimal()
 
 plot2 <- ggplot(df, aes(x = PC2)) +
@@ -141,14 +178,123 @@ plot2 <- ggplot(df, aes(x = PC2)) +
   geom_text(data = outlierspc2, 
             aes(x = outlierspc2[,1], y= 0, label = rownames(outlierspc2)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
-  geom_rug(data = as.data.frame(pca_alz_genes$x), aes(x= PC2, y = 0), color= ifelse(abs(pca_alz_genes$x[,2]) > 2*(pca_alz_genes$sdev[2]), "black", "grey")) +
+  geom_rug(data = as.data.frame(pca_alz_genes$x), aes(x= PC2, y = 0), color= ifelse(abs(pca_alz_genes$x[,2]) > 2*(pca_alz_genes$sdev[2]), "#8B1A1A", "grey")) +
   theme_minimal()
 
 grid.arrange(plot1, plot2, ncol = 1)
 ```
 
+Creamos los grupos de muestras seleccionados de los outliers de PC1 y/o PC2
+
+```{r}
+mPC1 <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc1),]
+mPC2 <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc2),]
+mPC12 <- mat_exp[(rownames(mat_exp) %in% rownames(outlierspc2)) & (rownames(mat_exp) %in% rownames(outlierspc1)),]
+
+not_in_PC12 <- mat_exp[!((rownames(mat_exp) %in% rownames(outlierspc2)) | (rownames(mat_exp) %in% rownames(outlierspc1))),]
+```
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(rownames_mPC1), length(rownames_mPC2), length(rownames_mPC12))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_mPC1 <- c(rownames(mPC1), rep("", max_length - length(rownames_mPC1)))
+rownames_mPC2 <- c(rownames(mPC2), rep("", max_length - length(rownames_mPC2)))
+rownames_mPC12 <- c(rownames(mPC12), rep("", max_length - length(rownames_mPC12)))
+
+final_table <- data.frame(
+  mPC1 = rownames_mPC1,
+  mPC2 = rownames_mPC2,
+  mPC1_and_PC2 = rownames_mPC12
+)
+
+print(final_table)
+
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = list(mat_exp = rownames(mat_exp), mPC1 = rownames(mPC1), mPC2 = rownames(mPC2)),
+  category.names = c("Expression matrix", "mPC1", "mPC2" ),
+  filename = NULL,
+  output = FALSE,  # Asegura que no se exporte a un archivo
+  fill = c("#F08080", "#7FFFD4", "#87CEEB"),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = 0, #posicion de las categoricas
+  cat.dist = -0.05, #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0, #sin borde
+  main = "Sample set",
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 1)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+```{r}
+covs2 <- covs
+rownames(covs2) <- covs2$mrna_id
+
+
+for (i in rownames(mat_exp)){
+  if (i %in% rownames(mPC1) & !(i %in% rownames(mPC12))){
+    covs2[i, "sampleset"] <- "mPC1"
+  }
+  if (i %in% rownames(mPC2) & !(i %in% rownames(mPC12))){
+    covs2[i, "sampleset"] <- "mPC2"
+  }
+  if (i %in% rownames(mPC12)){
+    covs2[i, "sampleset"] <- "mPC1 and mPC2"
+  }
+  if (!(i %in% rownames(mPC1)) & !(i %in% rownames(mPC2))){
+    covs2[i, "sampleset"] <- "Not in both"
+  }
+}
+
+table(covs2$sampleset)
+
+```
 
 
 
+```{r}
+pca <-  as.data.frame(pca_alz_genes$x)
+pca <- merge(pca, as.data.frame(covs2), by = "row.names")
+rownames(pca) <- pca$Row.names
+pca$Row.names <- NULL  
+
+# Gráfico de componentes principales para cada estado
+ggplot(pca, aes(PC1, PC2, color = as.factor(sampleset))) +
+  modelr::geom_ref_line(h = 0) +
+  modelr::geom_ref_line(v = 0) +
+  geom_point() +
+  #geom_text(aes(label = mrna_id), size = 3) +
+  xlab("PC 1 ") +
+  ylab("PC 2") +
+  ggtitle("First Two PCs")
+```
+
+```{r}
+pca_plot_cov <- function(data, covariable_name){
+  ggplot(data, aes(x = PC1, y = PC2, color = as.factor(data[[covariable_name]]))) +
+  modelr::geom_ref_line(h = 0) +
+  modelr::geom_ref_line(v = 0) +
+  geom_point() +
+  xlab("PC 1 ") +
+  ylab("PC 2") +
+  ggtitle("First Two PCs")
+}
+
+pca_plot_cov(pca, "cogdx")
+```
 
 
