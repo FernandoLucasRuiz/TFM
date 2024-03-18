@@ -26,16 +26,20 @@ library(AnnotationDbi)
 library(org.Hs.eg.db)
 
 library(VennDiagram)
-library(grid)
-
 library(ggplot2)
 library(gridExtra)
 library(purrr)
 library(patchwork)
+library(nortest)
+
+library(ggrepel)
+library(Rtsne)
+library(umap)
 ```
 
 # Leyendo datos
 
+Descargar los datos 
 ```{r}
 # covariables
 ROSMAP_RINPMIAGESEX_covs <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_covs.rds")
@@ -46,15 +50,18 @@ ROSMAP_RINPMIAGESEX_resids <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSID
 mat_exp <- ROSMAP_RINPMIAGESEX_resids
 ```
 
-```{r}
-covs$neuroStatus <- as.factor(covs$neuroStatus)
-```
 
 ```{r}
+covs$projid <- as.character(covs$projid)
+covs$study <- as.factor(covs$study)
+covs$ceradsc <- as.factor(covs$ceradsc)
+covs$cogdx <- as.factor(covs$cogdx)
+covs$neuroStatus <- as.factor(covs$neuroStatus)
+rownames(covs) <- covs$mrna_id
 describe(covs)
 ```
 
-## geneset de alzheimer
+# geneset de alzheimer
 
 ```{r}
 # geneset de Alzheimer extraidos de KEGG
@@ -73,9 +80,9 @@ geneset_alz <- tab$Symbol[tab$PathwayID=="hsa05010"]
 
 ```
 
-# Geneset en matriz de expresion
+## Geneset en matriz de expresion
 
-Vamos a seleccionar solamente los genes de Alzheimer de KEGG en nuestro dataset
+Vamos a seleccionar solamente los genes de Alzheimer de KEGG en nuestro dataset de expresión génica.
 
 ```{r}
 mat_exp_alz_genes <- mat_exp[, colnames(mat_exp) %in% geneset_alz]
@@ -103,25 +110,26 @@ venn.plot <- venn.diagram(
   cat.dist = 0.1, #distancia de las categoricas
   rotation.degree = 0, 
   margin = 0.1, # hacerla más pequeña
-  lwd=0, #sin borde
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
   main = "Alzheimer genes in exp matrix",
   main.fontface= "bold", 
   main.cex = 2,
   main.pos = c(0.5, 1)
 )
 
-# Dibuja el diagrama de Venn generado
 grid.newpage()  # Asegura que el lienzo esté limpio
 grid.draw(venn.plot)
-
 ```
-## PCA
 
-Hacemos PCA de nuestra nueva matriz con los genes seleccionados de Alzheimer
+## Sin escalar
+### PCA datos matriz sin escalar
+
+Hacemos PCA de nuestra nueva matriz con los genes seleccionados de Alzheimer. Los datos vienen libres de sesgos. Tampoco sería necesario el escalado de los datos ya que todos tienen la misma escala y vienen normalizados de antes.
 
 ```{r}
 pca_alz_genes <- prcomp(mat_exp_alz_genes)
-pca_alz_genes_scaled <- prcomp(mat_exp_alz_genes, scale. = T)
 ```
 
 ```{r, echo=FALSE}
@@ -133,48 +141,53 @@ df_var_exp <- data.frame(Comp = 1:length(prop_var_exp), VarExp = prop_var_exp)
 df_cum_var_exp <- data.frame(Comp = 1:length(cum_var_exp), CumVarExp = cum_var_exp)
 
 # Scree plot con los datos no escalados
-plot1 <- ggplot(df_var_exp[1:5,], aes(x = Comp, y = VarExp)) +
+ggplot(df_var_exp[1:5,], aes(x = Comp, y = VarExp)) +
   geom_bar(stat = "identity", fill = "skyblue") +
   geom_line(aes(group = 1), color = "blue") +
   geom_point(color = "blue") +
   theme_minimal() +
-  labs(x = "Principal components", y = "Variance", title = "Scree Plot no scaled") +
+  labs(x = "Principal components", y = "Variance", title = "Scree Plot") +
   ylim(c(0,1)) +
   geom_line(data = df_cum_var_exp[1:5,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
   geom_point(data = df_cum_var_exp[1:5,], aes(x = Comp, y = CumVarExp), color = "red") +
   geom_bar(data = df_cum_var_exp[1:5,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
   annotate("text", x = 4, y = 0.85, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
   geom_text(data = df_cum_var_exp[1:5,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
-
-
-# Scree plot con los datos escalados
-var_exp <- pca_alz_genes_scaled$sdev^2
-prop_var_exp <- var_exp / sum(var_exp)
-cum_var_exp <- cumsum(prop_var_exp)
-
-df_var_exp <- data.frame(Comp = 1:length(prop_var_exp), VarExp = prop_var_exp)
-df_cum_var_exp <- data.frame(Comp = 1:length(cum_var_exp), CumVarExp = cum_var_exp)
-
-plot2 <- ggplot(df_var_exp[1:5,], aes(x = Comp, y = VarExp)) +
-  geom_bar(stat = "identity", fill = "skyblue") +
-  geom_line(aes(group = 1), color = "blue") +
-  geom_point(color = "blue") +
-  theme_minimal() +
-  labs(x = "Principal components", y = "Variance", title = "Scree Plot scaled") +
-  ylim(c(0,1)) +
-  geom_line(data = df_cum_var_exp[1:5,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
-  geom_point(data = df_cum_var_exp[1:5,], aes(x = Comp, y = CumVarExp), color = "red") +
-  geom_bar(data = df_cum_var_exp[1:5,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
-  annotate("text", x = 4, y = 0.85, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
-  geom_text(data = df_cum_var_exp[1:5,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
-
-grid.arrange(plot1, plot2, ncol=2)
-
 ```
 
-## Seleccionar muestras con el doble de la desviación típica
+El 63% de la varinza se explica en la primera componente principal. Eso en una matriz de expresión es raro, ya que suele ser bastante homogéneo.
 
-Seleccionamos muestras que esten 2 veces la desviacion tipica para la PC1
+
+```{r, fig.height=10, fig.width=10, warning=FALSE}
+pca.covs <-  as.data.frame(pca_alz_genes$x[,1:10])
+pca.covs <- merge(pca.covs, as.data.frame(covs), by = "row.names")
+rownames(pca.covs) <- pca.covs$Row.names
+pca.covs$Row.names <- NULL
+
+plots <- list()
+
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 11:ncol(pca.covs)) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(pca.covs, aes_string(x = names(pca.covs)[1], y = names(pca.covs)[2], color = names(pca.covs)[i])) +
+    geom_point() +
+    labs(title = names(pca.covs)[i],
+         x = names(pca.covs)[1], y = names(pca.covs)[2], color = names(pca.covs)[i]) +
+    modelr::geom_ref_line(h = 0) +
+    modelr::geom_ref_line(v = 0) +
+    geom_point() +
+    xlab("PC 1 ") +
+    ylab("PC 2")
+
+  plots[[colnames(pca.covs)[i]]] <- p
+}
+
+grid.arrange(plots$study, plots$age_death, plots$msex, plots$batch, plots$pmi, plots$rin, ncol=2)
+grid.arrange(plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype, plots$neuroStatus, ncol=2)
+```
+### Seleccionar muestras con el doble de la desviación típica
+
+Seleccionamos muestras que esten 2 veces la desviacion tipica para la PC1 y PC2
 
 ```{r}
 outlierspc1 <- as.data.frame(pca_alz_genes$x[abs(pca_alz_genes$x[,1]) > 2*(pca_alz_genes$sdev[1]),1])
@@ -212,7 +225,279 @@ plot2 <- ggplot(df, aes(x = PC2)) +
 grid.arrange(plot1, plot2, ncol = 1)
 ```
 
-Ahora lo voy a probar escalando los resultados y luego compararé si son las mismas muestras las que se van.
+
+Creamos los grupos de muestras seleccionados de los outliers de PC1 y/o PC2
+
+```{r}
+mPC1 <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc1),]
+mPC2 <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc2),]
+mPC12 <- mat_exp[(rownames(mat_exp) %in% rownames(outlierspc2)) & (rownames(mat_exp) %in% rownames(outlierspc1)),]
+
+not_in_PC12 <- mat_exp[!((rownames(mat_exp) %in% rownames(outlierspc2)) | (rownames(mat_exp) %in% rownames(outlierspc1))),]
+```
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(rownames(mPC1)), length(rownames(mPC2)), length(rownames(mPC12)))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_mPC1 <- c(rownames(mPC1), rep("", max_length - length(rownames(mPC1))))
+rownames_mPC2 <- c(rownames(mPC2), rep("", max_length - length(rownames(mPC2))))
+rownames_mPC12 <- c(rownames(mPC12), rep("", max_length - length(rownames(mPC12))))
+
+final_table <- data.frame(
+  mPC1 = rownames_mPC1,
+  mPC2 = rownames_mPC2,
+  mPC1_and_PC2 = rownames_mPC12
+)
+
+print(final_table)
+
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = list(mat_exp = rownames(pca_alz_genes$x), mPC1 = rownames(mPC1), mPC2 = rownames(mPC2)),
+  category.names = c("Expression matrix", "mPC1", "mPC2" ),
+  filename = NULL,
+  output = FALSE,  # Asegura que no se exporte a un archivo
+  fill = c("#F08080", "#7FFFD4", "#87CEEB"),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = 0, #posicion de las categoricas
+  cat.dist = -0.05, #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = "Sample set not scaled PCA",
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 1)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+### Covariables en outliers
+
+Metemos una nueva variable en las covariables dependiendo de si son outliers de PC1 o del PC2 o de ninguno.
+
+```{r}
+rownames(covs) <- covs$mrna_id
+
+for (i in rownames(mat_exp)){
+  if (i %in% rownames(mPC1) & !(i %in% rownames(mPC12))){
+    covs[i, "sampleset_PCA"] <- "mPC1"
+  }
+  if (i %in% rownames(mPC2) & !(i %in% rownames(mPC12))){
+    covs[i, "sampleset_PCA"] <- "mPC2"
+  }
+  if (i %in% rownames(mPC12)){
+    covs[i, "sampleset_PCA"] <- "mPC1 and mPC2"
+  }
+  if (!(i %in% rownames(mPC1)) & !(i %in% rownames(mPC2))){
+    covs[i, "sampleset_PCA"] <- "Not in both"
+  }
+}
+
+covs$sampleset_PCA <- as.factor(covs$sampleset_PCA)
+table(covs$sampleset_PCA)
+```
+
+Ahora vamos a hacer un análisis estadístico para ver si hay diferencias significativas entre las muestras outliers de cada componente principal con las que no lo están (mPC1 vs Not in both, mPC2 vs Not in both, mPC12 vs Not in both)
+
+
+```{r, fig.width= 10, fig.height= 10}
+plots <- list()
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 1:ncol(covs)) {
+  col_name <- colnames(covs)[i]
+  if (class(covs[[i]]) == "character"){
+    next
+  }
+  if (class(covs[[i]]) == "factor"){
+    p <- covs %>%
+      group_by(across(all_of(col_name)), sampleset_PCA) %>%
+      summarise(count = n(), .groups = 'drop') %>%
+      mutate(total = sum(count), percentage = (count / total) * 100) %>%
+      ggplot(aes_string(x = names(covs)[i], y = "percentage", fill = "sampleset_PCA")) +
+      geom_bar(stat = "identity", position = "fill") +
+      labs(x = NULL, y = "%", fill = col_name) +
+      theme_minimal()
+    
+    plots[[colnames(covs)[i]]] <- p
+  }
+  if (class(covs[[i]]) == "numeric"){
+    p <- ggplot(covs, aes_string(y=names(covs)[i], x = "sampleset_PCA", fill = "sampleset_PCA")) +
+      geom_boxplot(alpha=.7)+
+      geom_jitter(color ="#8B1A1A", size = 0.7, alpha = 0.7) +
+      theme_minimal() +
+      labs(title = names(covs)[i], x = names(covs)[i])
+    
+    plots[[colnames(covs)[i]]] <- p
+  }
+}
+
+grid.arrange(plots$age_death, plots$pmi, plots$rin, ncol=2)
+grid.arrange(plots$study , plots$msex, plots$batch, plots$braaksc, ncol=2)
+grid.arrange(plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
+
+```
+
+```{r, warning=FALSE}
+statistical.tests <- function(df, outlier){
+  for (i in colnames(df)) {
+    #outlier <- "mPC1" 
+      if (i == "mrna_id" | i == "projid" | i == "sampleset_PCA" | i == "sampleset_tSNE")  {
+          next
+      }
+    
+    # filtro primero los datos por los que quiero comparar outlier y no incluidos
+      filtered_df <- df[df$sampleset_PCA %in% c(outlier, "Not in both"), ]
+    
+      # si la variable es numérica 
+      if (class(filtered_df[[i]]) == "numeric") {
+        
+        # hacemos test de normalidad de la variable para ver si hacemos test paramétrico o no paramétrico
+        normality <- lillie.test(filtered_df[[i]])
+        
+        # si los datos no son paramétricos
+        if (normality$p.value < 0.05) { 
+          
+          # Verificar que sampleset_PCA tenga exactamente 2 niveles después del filtrado
+          if (length(unique(filtered_df$sampleset_PCA)) == 2) {
+              wilcox_test <- wilcox.test(filtered_df[[i]] ~ filtered_df$sampleset_PCA)
+              
+              if (wilcox_test$p.value < 0.05) {
+                  print(paste("U Mann-Witney test significativo de", i, "con un pvalor de:", round(wilcox_test$p.value, 6), "entre", outlier, " y 'Not in both'"))
+                
+              } else {
+                print(paste("No hay diferencia significativa de la variable", i, "entre", outlier, "y 'Not in both'"))
+              }
+          }
+          
+          # si la variable numérica es paramétrica
+         } else if (normality$p.value >= 0.05) {
+  
+            # hacemos test de la varianza
+            var_test <- var.test(filtered_df[[i]] ~ filtered_df$sampleset_PCA)
+          
+            # le pasamos el t.test dependiendo de si las varanzas son iguales o no
+            if (var_test$p.value < 0.05) {
+              t_test <-  t.test(filtered_df[[i]] ~ filtered_df$sampleset_PCA, var.equal = F)
+              if (t_test$p.value < 0.05){
+                print(paste("T test significativo (varianzas desiguales) de",
+                            i, "con un pvalor de:", round(t_test$p.value, 6)))
+              } else {
+                print(paste("No hay diferencia significativa de la variable", i,  "entre", outlier, "y 'Not in both'"))
+              }
+              
+            } else {
+              t_test <-  t.test(filtered_df[[i]] ~ filtered_df$sampleset_PCA, var.equal = T)
+            
+              if (t_test$p.value < 0.05){
+                print(paste("T test significativo (varianzas iguales) de",
+                          i, "con un pvalor de:", round(t_test$p.value, 6)))
+              } else {
+                print(paste("No hay diferencia significativa de la variable", i,  "entre", outlier, "y 'Not in both'"))
+              }
+            }
+         } 
+      } 
+    
+      # si la variable es categórica le vamos a pasar un test chisq
+      if (class(filtered_df[[i]]) == "factor") {
+        
+        # hacemos la tabla de contingencia
+        contingency_table <- table(filtered_df[[i]], filtered_df$sampleset_PCA)
+        
+        # test de Chi-cuadrado
+        test_chi <- chisq.test(contingency_table)
+        
+        if (!is.na(test_chi$p.value) && test_chi$p.value < 0.05) {
+            print(paste("Test de Chi-cuadrado significativo para", i, "con un p-valor de:", round(test_chi$p.value, 6), "entre", outlier, " y 'Not in both'"))
+        } else {
+            print(paste("No hay diferencia significativa de la variable", i,  "entre", outlier, "y 'Not in both'"))
+          }
+      }
+  }
+}
+```
+
+```{r, warning=FALSE}
+statistical.tests(covs, "mPC1")
+statistical.tests(covs, "mPC2")
+statistical.tests(covs, "mPC12")
+```
+
+
+## Escalado
+### PCA datos matriz escalando
+
+```{r}
+pca_alz_genes_scaled <- prcomp(mat_exp_alz_genes, scale = T)
+```
+
+
+```{r}
+# Scree plot con los datos escalados
+var_exp <- pca_alz_genes_scaled$sdev^2
+prop_var_exp <- var_exp / sum(var_exp)
+cum_var_exp <- cumsum(prop_var_exp)
+
+df_var_exp <- data.frame(Comp = 1:length(prop_var_exp), VarExp = prop_var_exp)
+df_cum_var_exp <- data.frame(Comp = 1:length(cum_var_exp), CumVarExp = cum_var_exp)
+
+ggplot(df_var_exp[1:20,], aes(x = Comp, y = VarExp)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_line(aes(group = 1), color = "blue") +
+  geom_point(color = "blue") +
+  theme_minimal() +
+  labs(x = "Principal components", y = "Variance", title = "Scree Plot scaled") +
+  ylim(c(0,1)) +
+  geom_line(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
+  geom_point(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), color = "red") +
+  geom_bar(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
+  annotate("text", x = 4, y = 0.85, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
+  geom_text(data = df_cum_var_exp[1:20,], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
+```
+Vemos que con las 20 primeras no encontramos ni siquiera el 80% de la varianza.
+
+```{r, fig.height=10, fig.width=10, warning=FALSE}
+pca.scaled.covs <-  as.data.frame(pca_alz_genes_scaled$x[,1:10])
+pca.scaled.covs <- merge(pca.scaled.covs, as.data.frame(covs), by = "row.names")
+rownames(pca.scaled.covs) <- pca.scaled.covs$Row.names
+pca.scaled.covs$Row.names <- NULL
+
+plots <- list()
+
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 11:ncol(pca.scaled.covs)) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(pca.scaled.covs, aes_string(x = names(pca.scaled.covs)[1], y = names(pca.scaled.covs)[2], color = names(pca.scaled.covs)[i])) +
+    geom_point() +
+    labs(title = names(pca.scaled.covs)[i],
+         x = names(pca.scaled.covs)[1], y = names(pca.scaled.covs)[2], color = names(pca.scaled.covs)[i]) +
+    modelr::geom_ref_line(h = 0) +
+    modelr::geom_ref_line(v = 0) +
+    geom_point() +
+    xlab("PC 1 ") +
+    ylab("PC 2")
+
+  plots[[colnames(pca.scaled.covs)[i]]] <- p
+}
+
+grid.arrange(plots$study, plots$age_death, plots$msex, plots$batch, plots$pmi, plots$rin, ncol=2)
+grid.arrange(plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype, plots$neuroStatus, ncol=2)
+```
+
+### Seleccionar muestras con el doble de la desviación típica
 
 ```{r}
 outlierspc1_scaled <- as.data.frame(pca_alz_genes_scaled$x[abs(pca_alz_genes_scaled$x[,1]) > 2*(pca_alz_genes_scaled$sdev[1]),1])
@@ -248,38 +533,6 @@ plot2 <- ggplot(df, aes(x = PC2)) +
 grid.arrange(plot1, plot2, ncol = 1)
 ```
 
-
-Creamos los grupos de muestras seleccionados de los outliers de PC1 y/o PC2
-
-```{r}
-mPC1 <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc1),]
-mPC2 <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc2),]
-mPC12 <- mat_exp[(rownames(mat_exp) %in% rownames(outlierspc2)) & (rownames(mat_exp) %in% rownames(outlierspc1)),]
-
-not_in_PC12 <- mat_exp[!((rownames(mat_exp) %in% rownames(outlierspc2)) | (rownames(mat_exp) %in% rownames(outlierspc1))),]
-```
-
-```{r}
-# Asegurarse de que todos son vectores del mismo largo para el dataframe final
-max_length <- max(length(rownames(mPC1)), length(rownames(mPC2)), length(rownames(mPC12)))
-
-# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
-rownames_mPC1 <- c(rownames(mPC1), rep("", max_length - length(rownames(mPC1))))
-rownames_mPC2 <- c(rownames(mPC2), rep("", max_length - length(rownames(mPC2))))
-rownames_mPC12 <- c(rownames(mPC12), rep("", max_length - length(rownames(mPC12))))
-
-final_table <- data.frame(
-  mPC1 = rownames_mPC1,
-  mPC2 = rownames_mPC2,
-  mPC1_and_PC2 = rownames_mPC12
-)
-
-print(final_table)
-
-```
-
-Ahora lo mismo pero con los datos escalados
-
 ```{r}
 mPC1_scaled <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc1_scaled),]
 mPC2_scaled <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc2_scaled),]
@@ -307,35 +560,6 @@ print(final_table)
 
 ```
 
-
-
-```{r}
-venn.plot <- venn.diagram(
-  x = list(mat_exp = rownames(mat_exp), mPC1 = rownames(mPC1), mPC2 = rownames(mPC2)),
-  category.names = c("Expression matrix", "mPC1", "mPC2" ),
-  filename = NULL,
-  output = FALSE,  # Asegura que no se exporte a un archivo
-  fill = c("#F08080", "#7FFFD4", "#87CEEB"),
-  cex = 1,  # Aumenta el tamaño del texto
-  fontface = "bold",
-  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
-  cat.fontface = "bold",
-  cat.default.pos = "text",
-  cat.pos = 0, #posicion de las categoricas
-  cat.dist = -0.05, #distancia de las categoricas
-  rotation.degree = 0, 
-  margin = 0.1, # hacerla más pequeña
-  lwd=0, #sin borde
-  main = "Sample set not scaled PCA",
-  main.fontface= "bold", 
-  main.cex = 2,
-  main.pos = c(0.5, 1)
-)
-
-grid.newpage()  # Asegura que el lienzo esté limpio
-grid.draw(venn.plot)
-```
-
 ```{r}
 venn.plot <- venn.diagram(
   x = list(mat_exp = rownames(mat_exp), mPC1 = rownames(mPC1_scaled), mPC2 = rownames(mPC2_scaled)),
@@ -352,7 +576,9 @@ venn.plot <- venn.diagram(
   cat.dist = -0.05, #distancia de las categoricas
   rotation.degree = 0, 
   margin = 0.1, # hacerla más pequeña
-  lwd=0, #sin borde
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
   main = "Sample set scaled PCA",
   main.fontface= "bold", 
   main.cex = 2,
@@ -363,174 +589,297 @@ grid.newpage()  # Asegura que el lienzo esté limpio
 grid.draw(venn.plot)
 ```
 
+Voy ahora a ver de esas muestras seleccionadas, qué covariables están asociadas con esas muestras outliers
 
-# Muestras seleccionadas junto con sus covariables 
-
-```{r}
-covs2 <- covs
-rownames(covs2) <- covs2$mrna_id
-
-for (i in rownames(mat_exp)){
-  if (i %in% rownames(mPC1) & !(i %in% rownames(mPC12))){
-    covs2[i, "sampleset"] <- "mPC1"
-  }
-  if (i %in% rownames(mPC2) & !(i %in% rownames(mPC12))){
-    covs2[i, "sampleset"] <- "mPC2"
-  }
-  if (i %in% rownames(mPC12)){
-    covs2[i, "sampleset"] <- "mPC1 and mPC2"
-  }
-  if (!(i %in% rownames(mPC1)) & !(i %in% rownames(mPC2))){
-    covs2[i, "sampleset"] <- "Not in both"
-  }
-}
-
-table(covs2$sampleset)
-
-```
+### Covariables en outliers
 
 ```{r}
-covs2_scaled <- covs
-rownames(covs2_scaled) <- covs2_scaled$mrna_id
+rownames(covs) <- covs$mrna_id
+covs.scaled <- covs
 
-
-for (i in rownames(mat_exp)){
+for (i in rownames(covs.scaled)){
   if (i %in% rownames(mPC1_scaled) & !(i %in% rownames(mPC12_scaled))){
-    covs2_scaled[i, "sampleset"] <- "mPC1"
+    covs.scaled[i, "sampleset_PCA"] <- "mPC1"
   }
   if (i %in% rownames(mPC2_scaled) & !(i %in% rownames(mPC12_scaled))){
-    covs2_scaled[i, "sampleset"] <- "mPC2"
+    covs.scaled[i, "sampleset_PCA"] <- "mPC2"
   }
   if (i %in% rownames(mPC12_scaled)){
-    covs2_scaled[i, "sampleset"] <- "mPC1 and mPC2"
+    covs.scaled[i, "sampleset_PCA"] <- "mPC1 and mPC2"
   }
   if (!(i %in% rownames(mPC1_scaled)) & !(i %in% rownames(mPC2_scaled))){
-    covs2_scaled[i, "sampleset"] <- "Not in both"
+    covs.scaled[i, "sampleset_PCA"] <- "Not in both"
   }
 }
 
-table(covs2_scaled$sampleset)
-
-```
-
-```{r, message=F, echo=FALSE}
-pca <-  as.data.frame(pca_alz_genes$x)
-pca <- merge(pca, as.data.frame(covs2), by = "row.names")
-rownames(pca) <- pca$Row.names
-pca$Row.names <- NULL  
-
-# Gráfico de componentes principales para cada estado
-ggplot(pca, aes(PC1, PC2, color = as.factor(neuroStatus))) +
-  modelr::geom_ref_line(h = 0) +
-  modelr::geom_ref_line(v = 0) +
-  geom_point() +
-  #geom_text(aes(label = mrna_id), size = 3) +
-  xlab("PC 1 ") +
-  ylab("PC 2") +
-  ggtitle("First Two PCs not scaled PCA")
-```
-
-```{r, message=F, echo=FALSE}
-pca_scaled <-  as.data.frame(pca_alz_genes_scaled$x)
-pca_scaled <- merge(pca_scaled, as.data.frame(covs2_scaled), by = "row.names")
-rownames(pca_scaled) <- pca_scaled$Row.names
-pca_scaled$Row.names <- NULL  
-
-# Gráfico de componentes principales para cada estado
-ggplot(pca_scaled, aes(PC1, PC2, color = as.factor(neuroStatus))) +
-  modelr::geom_ref_line(h = 0) +
-  modelr::geom_ref_line(v = 0) +
-  geom_point() +
-  #geom_text(aes(label = mrna_id), size = 3) +
-  xlab("PC 1 ") +
-  ylab("PC 2") +
-  ggtitle("First Two PCs scaled PCA")
+covs.scaled$sampleset_PCA <- as.factor(covs.scaled$sampleset_PCA)
+table(covs.scaled$sampleset_PCA)
 ```
 
 
-
-```{r}
-pca <-  as.data.frame(pca_alz_genes$x)
-pca <- merge(pca, as.data.frame(covs2), by = "row.names")
-rownames(pca) <- pca$Row.names
-pca$Row.names <- NULL 
-
+```{r, fig.width= 10, fig.height= 10}
 plots <- list()
 # Itera sobre las columnas de covariables y añadir a la lista
-for (i in 307:ncol(pca)) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(pca, aes_string(x = names(pca)[1], y = names(pca)[2], color = names(pca)[i])) +
-    geom_point() +
-    labs(title = names(pca)[i],
-         x = names(pca)[1], y = names(pca)[2], color = names(pca)[i]) +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
-    geom_point() +
-    xlab("PC 1 ") +
-    ylab("PC 2")
-  
-  plots[[i - 2]] <- p
+for (i in 1:ncol(covs.scaled)) {
+  col_name <- colnames(covs.scaled)[i]
+  if (class(covs.scaled[[i]]) == "character"){
+    next
+  }
+  if (class(covs.scaled[[i]]) == "factor"){
+    p <- covs.scaled %>%
+      group_by(across(all_of(col_name)), sampleset_PCA) %>%
+      summarise(count = n(), .groups = 'drop') %>%
+      mutate(total = sum(count), percentage = (count / total) * 100) %>%
+      ggplot(aes_string(x = names(covs.scaled)[i], y = "percentage", fill = "sampleset_PCA")) +
+      geom_bar(stat = "identity", position = "fill") +
+      labs(x = NULL, y = "%", fill = col_name) +
+      theme_minimal()
+    
+    plots[[colnames(covs.scaled)[i]]] <- p
+  }
+  if (class(covs.scaled[[i]]) == "numeric"){
+    p <- ggplot(covs.scaled, aes_string(y=names(covs.scaled)[i], x = "sampleset_PCA", fill = "sampleset_PCA")) +
+      geom_boxplot(alpha=.7)+
+      geom_jitter(color ="#8B1A1A", size = 0.7, alpha = 0.7) +
+      theme_minimal() +
+      labs(title = names(covs.scaled)[i], x = names(covs.scaled)[i])
+    
+    plots[[colnames(covs.scaled)[i]]] <- p
+  }
 }
 
-combined_plot <- plots[[307]]
-for (i in 308:length(plots)) {
-  combined_plot <- combined_plot + plots[[i]]
-}
-
-combined_plot + plot_layout(ncol = 4)
-```
-
-
-```{r}
-
-pca_scaled <-  as.data.frame(pca_alz_genes_scaled$x)
-pca_scaled <- merge(pca_scaled, as.data.frame(covs2_scaled), by = "row.names")
-rownames(pca_scaled) <- pca_scaled$Row.names
-pca_scaled$Row.names <- NULL  
-
-
-plots <- list()
-# Itera sobre las columnas de covariables y añadir a la lista
-for (i in 307:ncol(pca_scaled)) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(pca_scaled, aes_string(x = names(pca_scaled)[1], y = names(pca_scaled)[2], color = names(pca_scaled)[i])) +
-    geom_point() +
-    labs(title = names(pca_scaled)[i],
-         x = names(pca_scaled)[1], y = names(pca_scaled)[2], color = names(pca_scaled)[i]) +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
-    geom_point() +
-    xlab("PC 1 ") +
-    ylab("PC 2")
-  
-  plots[[i - 2]] <- p
-}
-
-combined_plot <- plots[[307]]
-for (i in 308:length(plots)) {
-  combined_plot <- combined_plot + plots[[i]]
-}
-
-combined_plot + plot_layout(ncol = 4)
-```
-
-```{r}
+grid.arrange(plots$age_death, plots$pmi, plots$rin, ncol=2)
+grid.arrange(plots$study , plots$msex, plots$batch, plots$braaksc, ncol=2)
+grid.arrange(plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
 
 ```
 
-```{r}
-ggplot(covs2, aes(x = neuroStatus, y = sampleset, color = sampleset))+
-  geom_bar(stat = "identity")
+```{r, warning=FALSE}
+statistical.tests(covs.scaled, "mPC1")
+statistical.tests(covs.scaled, "mPC2")
+statistical.tests(covs.scaled, "mPC12")
+```
 
-ggplot(covs2, aes(x = neuroStatus, fill = sampleset)) +
-  geom_bar(position = "dodge") +
+
+# tSNE
+
+Parámetros clave en t-SNE:
+Perplexity (Perplejidad): Este es uno de los parámetros más importantes en t-SNE. La perplejidad se relaciona con el número de vecinos cercanos que t-SNE considera cuando mapea los datos. Un valor demasiado bajo hace que el modelo se concentre demasiado en la estructura local, mientras que un valor demasiado alto puede llevar a una visión global que pierde detalles. La elección óptima depende del tamaño del dataset, pero valores típicos están entre 5 y 50.
+
+Número de iteraciones: t-SNE es un algoritmo iterativo, y el número de iteraciones puede afectar la estabilidad de los resultados. Un número insuficiente de iteraciones puede resultar en una organización incompleta, mientras que demasiadas iteraciones pueden no proporcionar beneficios adicionales y aumentar el tiempo de cálculo.
+
+Tasa de aprendizaje: Este parámetro controla el tamaño del paso en cada actualización durante la optimización. Una tasa de aprendizaje muy baja puede hacer que el algoritmo tarde mucho en converger, mientras que una tasa demasiado alta puede llevar a una convergencia pobre.
+
+```{r}
+set.seed(1234)
+tsne <- Rtsne(mat_exp_alz_genes, dims = 2, theta = 0.0, )
+
+tsne.data <- as.data.frame(tsne$Y)
+row.names(tsne.data) <- row.names(mat_exp_alz_genes)
+tsne.data.covs <- merge(tsne.data, covs, by = "row.names")
+tsne.data.covs$Row.names <- NULL
+row.names(tsne.data.covs) <- tsne.data.covs$mrna_id
+
+ggplot(tsne.data.covs, aes(x=V1, y=V2, color=neuroStatus)) +  
+  geom_point(size=2) +
+  guides(colour=guide_legend(override.aes=list(size=6))) +
+  xlab("tSNE1") + ylab("tSNE2") +
+  ggtitle("t-SNE") +
   theme_minimal() +
-  labs(x = "Sample Set", y = "Count", title = "Conteo por Sample Set y Variable de Interés") +
-  scale_fill_brewer(palette = "Pastel1") 
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank()) +
+  scale_colour_brewer(palette = "Set1")
+```
+
+## Seleccionamos outliers
+
+```{r}
+rownames(tsne.data) <- rownames(mat_exp_alz_genes)
+
+# Calcular la media y la desviación estándar para cada componente de t-SNE
+mean.tsne1 <- mean(tsne.data[,1])
+sd.tsne1 <- sd(tsne.data[,1])
+mean.tsne2 <- mean(tsne.data[,2])
+sd.tsne2 <- sd(tsne.data[,2])
+
+# Identificar muestras a más de 2 desviaciones estándar de la media
+outliers.tsne1 <- tsne.data[abs(tsne.data[,1] - mean.tsne1) > 2 * sd.tsne1, ]
+outliers.tsne2 <-tsne.data[abs(tsne.data[,2] - mean.tsne2) > 2 * sd.tsne2, ]
+```
+
+```{r, echo=F}
+plot1 <- ggplot(tsne.data, aes(x = V1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.tsne1 + 2*sd.tsne1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.tsne1 - 2*sd.tsne1, linetype = "dashed", color = "blue") +
+  labs(title = "tSNE1 density with 2*SD tSNE") +
+  geom_text(data = outliers.tsne1, 
+            aes(x = outliers.tsne1[,1], y= 0, label = rownames(outliers.tsne1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(tsne$Y), aes(x= V1, y = 0), color= ifelse(abs(tsne$Y[,1]) > 2*sd.tsne1, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+plot2 <- ggplot(tsne.data, aes(x = V2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean(df$V2) + 2*sd.tsne2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(df$V2) - 2*sd.tsne2, linetype = "dashed", color = "blue") +
+  labs(title = "tSNE2 density with 2*SD tSNE") +
+  geom_text(data = outliers.tsne2, 
+            aes(x = outliers.tsne2[,2], y= 0, label = rownames(outliers.tsne2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(tsne$Y), aes(x= V2, y = 0), color= ifelse(abs(tsne.data[,2]) > 2*sd.tsne2, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1, plot2, ncol = 1)
+```
+
+```{r}
+mtSNE1 <- mat_exp[rownames(mat_exp) %in% rownames(outliers.tsne1),]
+mtSNE2 <- mat_exp[rownames(mat_exp) %in% rownames(outliers.tsne2),]
+mtSNE12 <- mat_exp[(rownames(mat_exp) %in% rownames(outliers.tsne1)) & (rownames(mat_exp) %in% rownames(outliers.tsne2)),]
+
+not_in_tSNE12 <- mat_exp[!((rownames(mat_exp) %in% rownames(outliers.tsne1)) | (rownames(mat_exp) %in% rownames(outliers.tsne2))),]
+```
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(rownames(mtSNE1)), length(rownames(mtSNE2)), length(rownames(mtSNE12)))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_tsne1 <- c(rownames(mtSNE1), rep("", max_length - length(rownames(mtSNE1))))
+rownames_tsne2 <- c(rownames(mtSNE2), rep("", max_length - length(rownames(mtSNE2))))
+rownames_tsne12 <- c(rownames(mtSNE12), rep("", max_length - length(rownames(mtSNE12))))
+
+final_table <- data.frame(
+  mtSNE1 = rownames_tsne1,
+  mtSNE2 = rownames_tsne2,
+  mtSNE1_and_mtSNE2 = rownames_tsne12
+)
+
+print(final_table)
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = list(mat_exp = rownames(tsne.data), mtSNE1 = rownames(mtSNE1), mtSNE2 = rownames(mtSNE2)),
+  category.names = c("Expression matrix", "mtSNE1", "mtSNE2" ),
+  filename = NULL,
+  output = FALSE,  # Asegura que no se exporte a un archivo
+  fill = c("#F08080", "#7FFFD4", "#87CEEB"),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = 0, #posicion de las categoricas
+  cat.dist = -0.05, #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = "Sample set tSNE",
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 1)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+```{r}
+for (i in rownames(covs)){
+  if (i %in% rownames(mtSNE1) & !(i %in% rownames(mtSNE12))){
+    covs[i, "sampleset_tSNE"] <- "mtSNE1"
+  }
+  if (i %in% rownames(mtSNE2) & !(i %in% rownames(mtSNE12))){
+    covs[i, "sampleset_tSNE"] <- "mtSNE2"
+  }
+  if (i %in% rownames(mtSNE12)){
+    covs[i, "sampleset_tSNE"] <- "mtSNE1 and mtSNE2"
+  }
+  if (!(i %in% rownames(mtSNE1)) & !(i %in% rownames(mtSNE2))){
+    covs[i, "sampleset_tSNE"] <- "Not in both"
+  }
+}
+
+covs$sampleset_tSNE <- as.factor(covs$sampleset_tSNE)
+table(covs$sampleset_tSNE)
+```
+
+```{r, fig.width= 10, fig.height= 10}
+plots <- list()
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 1:ncol(covs)) {
+  col_name <- colnames(covs)[i]
+  
+  if (class(covs[[i]]) == "character"){
+    next
+  }
+  if (class(covs[[i]]) == "factor"){
+    p <- covs %>%
+      group_by(across(all_of(col_name)), sampleset_tSNE) %>%
+      summarise(count = n(), .groups = 'drop') %>%
+      mutate(total = sum(count), percentage = (count / total) * 100) %>%
+      ggplot(aes_string(x = names(covs)[i], y = "percentage", fill = "sampleset_tSNE")) +
+      geom_bar(stat = "identity", position = "fill") +
+      labs(x = NULL, y = "%", fill = col_name) +
+      theme_minimal()
+    
+    plots[[colnames(covs)[i]]] <- p
+  }
+  if (class(covs[[i]]) == "numeric"){
+    p <- ggplot(covs, aes_string(y=names(covs)[i], x = "sampleset_tSNE", fill = "sampleset_tSNE")) +
+      geom_boxplot(alpha=.7)+
+      geom_jitter(color ="#8B1A1A", size = 0.7, alpha = 0.7) +
+      theme_minimal() +
+      labs(title = names(covs)[i], x = names(covs)[i])
+    
+    plots[[colnames(covs)[i]]] <- p
+  }
+}
+
+grid.arrange(plots$age_death, plots$pmi, plots$rin, ncol=2)
+grid.arrange(plots$study , plots$msex, plots$batch, plots$braaksc, ncol=2)
+grid.arrange(plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
 
 ```
 
+```{r, warning=FALSE}
+statistical.tests(covs, "mtSNE1")
+statistical.tests(covs, "mtSNE2")
+statistical.tests(covs, "mtSNE12")
+```
 
+
+# UMAP
+
+```{r}
+local.config <- umap.defaults
+# local.config$n_neighbors <- 4
+# local.config$n_components <- 2
+# local.config$n_epochs <- 100
+# local.config$metric<- "euclidean"
+set.seed(1234)
+umap.ad <- umap(mat_exp_alz_genes,random_stage=1234, local.config)
+
+umap.data <- as.data.frame(umap.ad$layout)
+row.names(umap.data) <- row.names(mat_exp_alz_genes)
+umap.data.covs <- merge(umap.data, covs, by = "row.names")
+umap.data.covs$Row.names <- NULL
+row.names(umap.data.covs) <- umap.data.covs$mrna_id
+
+ggplot(umap.data.covs, aes(x=V1, y=V2, color = neuroStatus)) +  
+  geom_point(size=2) +
+  guides(colour=guide_legend(override.aes=list(size=6))) +
+  xlab("UMAP1") + ylab("UMAP2") +
+  ggtitle("UMAP") +
+  theme_minimal() +
+  theme(axis.text.x=element_blank(),
+        axis.text.y=element_blank()) +
+  scale_colour_brewer(palette = "Set2")
+```
 
 
 
