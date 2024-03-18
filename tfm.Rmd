@@ -881,6 +881,136 @@ ggplot(umap.data.covs, aes(x=V1, y=V2, color = neuroStatus)) +
         axis.text.y=element_blank()) +
   scale_colour_brewer(palette = "Set2")
 ```
+## Seleccionamos outliers
 
+```{r}
+rownames(umap.data) <- rownames(mat_exp_alz_genes)
+
+# Calcular la media y la desviación estándar para cada componente de t-SNE
+mean.umap1 <- mean(umap.data[,1])
+sd.umap1 <- sd(umap.data[,1])
+mean.umap2 <- mean(umap.data[,2])
+sd.umap2 <- sd(umap.data[,2])
+
+# Identificar muestras a más de 2 desviaciones estándar de la media
+outliers.umap1 <- umap.data[abs(umap.data[,1] - mean.umap1) > 2 * sd.umap1, ]
+outliers.umap2 <-umap.data[abs(umap.data[,2] - mean.umap2) > 2 * sd.umap2, ]
+```
+
+```{r, echo=F}
+plot1 <- ggplot(umap.data, aes(x = V1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.umap1 + 2*sd.umap1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap1 - 2*sd.umap1, linetype = "dashed", color = "blue") +
+  labs(title = "UMAP1 density with 2*SD UMAP") +
+  geom_text(data = outliers.umap1, 
+            aes(x = outliers.umap1[,1], y= 0, label = rownames(outliers.umap1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V1, y = 0), color= ifelse(abs(umap.ad$layout[,1]) > 2*sd.umap1, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+plot2 <- ggplot(umap.data, aes(x = V2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean(umap.data$V2) + 2*sd.umap2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(umap.data$V2) - 2*sd.umap2, linetype = "dashed", color = "blue") +
+  labs(title = "UMAP2 density with 2*SD UMAP") +
+  geom_text(data = outliers.umap2, 
+            aes(x = outliers.umap2[,2], y= 0, label = rownames(outliers.umap2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V2, y = 0), color= ifelse(abs(umap.data[,2]) > 2*sd.umap2, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1, plot2, ncol = 1)
+```
+
+```{r}
+mUMAP1 <- mat_exp[rownames(mat_exp) %in% rownames(outliers.umap1),]
+mUMAP2 <- mat_exp[rownames(mat_exp) %in% rownames(outliers.umap2),]
+mUMAP12 <- mat_exp[(rownames(mat_exp) %in% rownames(outliers.umap1)) & (rownames(mat_exp) %in% rownames(outliers.umap2)),]
+
+not_in_UMAP12 <- mat_exp[!((rownames(mat_exp) %in% rownames(outliers.umap1)) | (rownames(mat_exp) %in% rownames(outliers.umap2))),]
+```
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(rownames(mUMAP1)), length(rownames(mUMAP2)), length(rownames(mUMAP12)))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_umap1 <- c(rownames(mUMAP1), rep("", max_length - length(rownames(mUMAP1))))
+rownames_umap2 <- c(rownames(mUMAP2), rep("", max_length - length(rownames(mUMAP2))))
+rownames_umap12 <- c(rownames(mUMAP12), rep("", max_length - length(rownames(mUMAP12))))
+
+final_table <- data.frame(
+  mUMAP1 = rownames_umap1,
+  mUMAP2 = rownames_umap2,
+  mUMAP1_and_mUMAP2 = rownames_umap12
+)
+
+print(final_table)
+```
+
+
+
+```{r}
+for (i in rownames(covs)){
+  if (i %in% rownames(mUMAP1) & !(i %in% rownames(mUMAP12))){
+    covs[i, "sampleset_UMAP"] <- "mUMAP1"
+  }
+  if (i %in% rownames(mUMAP2) & !(i %in% rownames(mUMAP12))){
+    covs[i, "sampleset_UMAP"] <- "mUMAP2"
+  }
+  if (i %in% rownames(mUMAP12)){
+    covs[i, "sampleset_UMAP"] <- "mUMAP1 and mUMAP2"
+  }
+  if (!(i %in% rownames(mUMAP1)) & !(i %in% rownames(mUMAP2))){
+    covs[i, "sampleset_UMAP"] <- "Not in both"
+  }
+}
+
+covs$sampleset_UMAP <- as.factor(covs$sampleset_UMAP)
+table(covs$sampleset_UMAP)
+```
+
+```{r, fig.width= 10, fig.height= 10}
+plots <- list()
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 1:ncol(covs)) {
+  col_name <- colnames(covs)[i]
+  
+  if (class(covs[[i]]) == "character"){
+    next
+  }
+  if (class(covs[[i]]) == "factor"){
+    p <- covs %>%
+      group_by(across(all_of(col_name)), sampleset_UMAP) %>%
+      summarise(count = n(), .groups = 'drop') %>%
+      mutate(total = sum(count), percentage = (count / total) * 100) %>%
+      ggplot(aes_string(x = names(covs)[i], y = "percentage", fill = "sampleset_UMAP")) +
+      geom_bar(stat = "identity", position = "fill") +
+      labs(x = NULL, y = "%", fill = col_name) +
+      theme_minimal()
+    
+    plots[[colnames(covs)[i]]] <- p
+  }
+  if (class(covs[[i]]) == "numeric"){
+    p <- ggplot(covs, aes_string(y=names(covs)[i], x = "sampleset_UMAP", fill = "sampleset_UMAP")) +
+      geom_boxplot(alpha=.7)+
+      geom_jitter(color ="#8B1A1A", size = 0.7, alpha = 0.7) +
+      theme_minimal() +
+      labs(title = names(covs)[i], x = names(covs)[i])
+    
+    plots[[colnames(covs)[i]]] <- p
+  }
+}
+
+grid.arrange(plots$age_death, plots$pmi, plots$rin, ncol=2)
+grid.arrange(plots$study , plots$msex, plots$batch, plots$braaksc, ncol=2)
+grid.arrange(plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
+
+```
+
+```{r, warning=FALSE}
+statistical.tests(covs, "mUMAP1")
+```
 
 
