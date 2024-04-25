@@ -10,13 +10,14 @@ output:
     theme: spacelab
     toc: true
     toc_float: true
+    code_folding: "hide"
   pdf_document:
     toc: true
 subtitle: Master en Bioinformática, Universidad de Murcia
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = F, warning = FALSE, message = F)
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
 ```
 
 ```{r}
@@ -32,6 +33,7 @@ library(patchwork) # Combinar múltiples ggplots en un único plot
 library(ggrepel) # Mejora la visualización de texto en ggplots evitando solapamientos de texto
 library(Rtsne) # Implementación de t-SNE
 library(umap) # Implementación de UMAP
+library(ggVennDiagram) # diagrama de Venn
 ```
 
 # Leyendo datos
@@ -60,10 +62,6 @@ mat_exp <- ROSMAP_RINPMIAGESEX_resids
 ```{r}
 # geneset de Alzheimer extraidos de KEGG
 
-# library(limma)
-# library(AnnotationDbi)
-# library(org.Hs.eg.db)
-
 tab <- getGeneKEGGLinks(species="hsa")
 tab$Symbol <- mapIds(org.Hs.eg.db, tab$GeneID,
                        column="SYMBOL", keytype="ENTREZID")
@@ -79,7 +77,6 @@ Vamos a seleccionar solamente los genes de Alzheimer de KEGG en nuestro dataset 
 ```{r}
 mat_exp_alz_genes <- mat_exp[, colnames(mat_exp) %in% geneset_alz]
 ```
-
 
 Visualizamos si se han seleccionado todos los genes y cuantos del geneset de KEGG
 
@@ -113,7 +110,6 @@ grid.draw(venn.plot)
 ```
 
 ## PCA
-### PCA datos matriz escalando
 
 ```{r}
 pca_alz_genes_scaled <- prcomp(mat_exp_alz_genes, scale = T)
@@ -144,32 +140,6 @@ ggplot(df_var_exp[1:20,], aes(x = Comp, y = VarExp)) +
 ```
 
 Vemos que con las 20 primeras no encontramos ni siquiera el 80% de la varianza.
-
-```{r, fig.height=10, fig.width=10, warning=FALSE}
-pca.scaled.covs <-  as.data.frame(pca_alz_genes_scaled$x[,1:2])
-pca.scaled.covs <- merge(pca.scaled.covs, as.data.frame(covs), by = "row.names")
-rownames(pca.scaled.covs) <- pca.scaled.covs$Row.names
-pca.scaled.covs$Row.names <- NULL
-
-plots <- list()
-
-# Itera sobre las columnas de covariables y añadir a la lista
-for (i in 3:ncol(pca.scaled.covs)) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(pca.scaled.covs, aes_string(x = names(pca.scaled.covs)[1], y = names(pca.scaled.covs)[2], color = names(pca.scaled.covs)[i])) +
-    geom_point() +
-    labs(title = names(pca.scaled.covs)[i],
-         x = names(pca.scaled.covs)[1], y = names(pca.scaled.covs)[2], color = names(pca.scaled.covs)[i]) +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
-    geom_point() 
-
-  plots[[colnames(pca.scaled.covs)[i]]] <- p
-}
-
-
-grid.arrange(plots$study, plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype, plots$neuroStatus, ncol=2)
-```
 
 ### Seleccionar muestras con el doble de la desviación típica
 
@@ -261,6 +231,14 @@ covs2$sampleset_PCA <- as.factor(covs2$sampleset_PCA)
 data.frame(table(covs2$sampleset_PCA))
 ```
 
+```{r}
+pca.data.kegg <- data.frame(pca_alz_genes_scaled$x)[,1:2]
+colnames(pca.data.kegg) <- c("PC1.KEGG", "PC2.KEGG")
+
+covs2 <- merge(covs2, pca.data.kegg, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
 
 ```{r, fig.width= 10, fig.height= 10}
 plots <- list()
@@ -287,6 +265,44 @@ for (i in 1:ncol(covs2)) {
 
 grid.arrange(plots$study , plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
 ```
+```{r, fig.height=8, fig.width=6}
+plots.pca.kegg <- list()
+
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 3:13) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(covs2, aes_string(x = "PC1.KEGG", y = "PC2.KEGG", color = names(covs2)[i])) +
+    geom_point(show.legend = TRUE) +
+    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outlierspc1_scaled) | mrna_id %in% rownames(outlierspc2_scaled), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 10, # Reduce el número máximo de solapamientos
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = names(covs2)[i],
+         x = "PC1.KEGG", y = "PC2.KEGG", color = names(covs2)[i]) +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm"),
+      plot.margin = margin(5, 5, 5, 5)# Agrega un margen alrededor de la gráfica si es necesario
+    )
+
+  plots.pca.kegg[[colnames(covs2)[i]]] <- p
+}
+
+grid.arrange(plots.pca.kegg$study, plots.pca.kegg$braaksc, ncol=1)
+
+grid.arrange(plots.pca.kegg$ceradsc, plots.pca.kegg$cogdx, ncol=1)
+
+grid.arrange(plots.pca.kegg$apoe_genotype, plots.pca.kegg$neuroStatus, ncol=1)
+```
 
 ## tSNE
 
@@ -307,27 +323,6 @@ tsne.data.covs <- merge(tsne.data, covs, by = "row.names")
 tsne.data.covs$Row.names <- NULL
 row.names(tsne.data.covs) <- tsne.data.covs$mrna_id
 ```
-
-```{r, fig.height=10, fig.width=10}
-plots <- list()
-
-# Itera sobre las columnas de covariables y añadir a la lista
-for (i in 3:ncol(tsne.data.covs)) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(tsne.data.covs, aes_string(x = names(tsne.data.covs)[1], y = names(tsne.data.covs)[2], color = names(tsne.data.covs)[i])) +
-    geom_point() +
-    labs(title = names(tsne.data.covs)[i],
-         x = names(tsne.data.covs)[1], y = names(tsne.data.covs)[2], color = names(tsne.data.covs)[i]) +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
-    geom_point() 
-
-  plots[[colnames(tsne.data.covs)[i]]] <- p
-}
-
-grid.arrange(plots$study, plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype, plots$neuroStatus, ncol=2)
-```
-
 
 ### Seleccionamos outliers
 
@@ -379,6 +374,8 @@ mtSNE12 <- mat_exp[(rownames(mat_exp) %in% rownames(outliers.tsne1)) & (rownames
 not_in_tSNE12 <- mat_exp[!((rownames(mat_exp) %in% rownames(outliers.tsne1)) | (rownames(mat_exp) %in% rownames(outliers.tsne2))),]
 ```
 
+### Covariables en outliers
+
 ```{r}
 for (i in rownames(covs2)){
   if (i %in% rownames(mtSNE1) & !(i %in% rownames(mtSNE12))){
@@ -417,6 +414,14 @@ final_table <- data.frame(
 final_table
 ```
 
+```{r}
+colnames(tsne.data) <- c("tSNE1.KEGG", "tSNE2.KEGG")
+
+covs2 <- merge(covs2, tsne.data, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
+
 ```{r, fig.width= 10, fig.height= 10}
 plots <- list()
 # Itera sobre las columnas de covariables y añadir a la lista
@@ -445,6 +450,45 @@ grid.arrange(plots$study , plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe
 
 ```
 
+```{r, fig.height=8, fig.width=6}
+plots.tsne.kegg <- list()
+
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 3:13) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(covs2, aes_string(x = "tSNE1.KEGG", y = "tSNE2.KEGG", color = names(covs2)[i])) +
+    geom_point(show.legend = TRUE) +
+    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outliers.tsne1) | mrna_id %in% rownames(outliers.tsne2), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 20, # Reduce el número máximo de solapamientos
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = names(covs2)[i],
+         x = "tSNE1.KEGG", y = "tSNE2.KEGG", color = names(covs2)[i]) +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm"),
+      plot.margin = margin(5, 5, 5, 5)# Agrega un margen alrededor de la gráfica si es necesario
+    )
+
+  plots.tsne.kegg[[colnames(covs2)[i]]] <- p
+}
+
+grid.arrange(plots.tsne.kegg$study, plots.tsne.kegg$braaksc, ncol=1)
+
+grid.arrange(plots.tsne.kegg$ceradsc, plots.tsne.kegg$cogdx, ncol=1)
+
+grid.arrange(plots.tsne.kegg$apoe_genotype, plots.tsne.kegg$neuroStatus, ncol=1)
+```
+
 ## UMAP
 
 ```{r}
@@ -463,25 +507,6 @@ umap.data.covs$Row.names <- NULL
 row.names(umap.data.covs) <- umap.data.covs$mrna_id
 ```
 
-```{r, fig.height= 10, fig.width=10}
-plots <- list()
-
-# Itera sobre las columnas de covariables y añadir a la lista
-for (i in 3:ncol(umap.data.covs)) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(umap.data.covs, aes_string(x = names(umap.data.covs)[1], y = names(umap.data.covs)[2], color = names(umap.data.covs)[i])) +
-    geom_point() +
-    labs(title = names(umap.data.covs)[i],
-         x = names(umap.data.covs)[1], y = names(umap.data.covs)[2], color = names(umap.data.covs)[i]) +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
-    geom_point() 
-
-  plots[[colnames(umap.data.covs)[i]]] <- p
-}
-
-grid.arrange(plots$study, plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype, plots$neuroStatus, ncol=2)
-```
 
 ### Seleccionamos outliers
 
@@ -532,6 +557,8 @@ mUMAP12 <- mat_exp[(rownames(mat_exp) %in% rownames(outliers.umap1)) & (rownames
 
 not_in_UMAP12 <- mat_exp[!((rownames(mat_exp) %in% rownames(outliers.umap1)) | (rownames(mat_exp) %in% rownames(outliers.umap2))),]
 ```
+
+### Covariables en outliers
 
 ```{r}
 for (i in rownames(covs2)){
@@ -598,6 +625,53 @@ for (i in 1:ncol(covs2)) {
 grid.arrange(plots$study , plots$braaksc,plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
 
 ```
+```{r}
+colnames(umap.data) <- c("UMAP1.KEGG", "UMAP2.KEGG")
+
+covs2 <- merge(covs2, umap.data, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
+
+```{r, fig.height=8, fig.width=6}
+plots.umap.kegg <- list()
+
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 3:13) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(covs2, aes_string(x = "UMAP1.KEGG", y = "UMAP2.KEGG", color = names(covs2)[i])) +
+    geom_point(show.legend = TRUE) +
+    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outliers.umap1) | mrna_id %in% rownames(outliers.umap2), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 30, # Reduce el número máximo de solapamientos
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = names(covs2)[i],
+         x = "UMAP1.KEGG", y = "UMAP2.KEGG", color = names(covs2)[i]) +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm"),
+      plot.margin = margin(5, 5, 5, 5)# Agrega un margen alrededor de la gráfica si es necesario
+    )
+
+  plots.umap.kegg[[colnames(covs2)[i]]] <- p
+}
+
+grid.arrange(plots.umap.kegg$study, plots.umap.kegg$braaksc, ncol=1)
+
+grid.arrange(plots.umap.kegg$ceradsc, plots.umap.kegg$cogdx, ncol=1)
+
+grid.arrange(plots.umap.kegg$apoe_genotype, plots.umap.kegg$neuroStatus, ncol=1)
+```
+
 
 # Geneset de AD de Andrews et al 2023 Lancet review
 
@@ -641,7 +715,6 @@ grid.draw(venn.plot)
 ```
 
 ## PCA
-### PCA datos matriz
 
 ```{r}
 pca.AD.Andrews <- prcomp(mat.expre.AD.Andrews, scale = T)
@@ -670,32 +743,7 @@ ggplot(df_var_exp[1:20,], aes(x = Comp, y = VarExp)) +
   geom_text(data = df_cum_var_exp[seq(0,20,2),], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
-```{r, fig.height=10, fig.width=10, warning=FALSE}
-pca.covs <-  as.data.frame(pca.AD.Andrews$x[,1:2])
-pca.covs <- merge(pca.covs, as.data.frame(covs2), by = "row.names")
-rownames(pca.covs) <- pca.covs$Row.names
-pca.covs$Row.names <- NULL
 
-plots <- list()
-
-# Itera sobre las columnas de covariables y añadir a la lista
-for (i in 5:ncol(pca.covs)) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(pca.covs, aes_string(x = names(pca.covs)[1], y = names(pca.covs)[2], color = names(pca.covs)[i])) +
-    geom_point() +
-    labs(title = names(pca.covs)[i],
-         x = names(pca.covs)[1], y = names(pca.covs)[2], color = names(pca.covs)[i]) +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
-    geom_point() +
-    xlab("PC 1 ") +
-    ylab("PC 2")
-
-  plots[[colnames(pca.covs)[i]]] <- p
-}
-
-grid.arrange(plots$study, plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype, plots$neuroStatus, ncol=2)
-```
 #### Seleccionar muestras con el doble de la desviación típica
 
 Seleccionamos muestras que esten 2 veces la desviacion tipica para la PC1 y PC2
@@ -818,6 +866,53 @@ for (i in 1:ncol(covs2)) {
 grid.arrange(plots$study , plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
 
 ```
+```{r}
+pca.data.Andrews <- data.frame(pca.AD.Andrews$x)[,1:2]
+colnames(pca.data.Andrews) <- c("PCA1.Andrews", "PCA2.Andrews")
+
+covs2 <- merge(covs2, pca.data.Andrews, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
+
+```{r, fig.height=8, fig.width=6}
+plots.pca.Andrews <- list()
+
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 3:13) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(covs2, aes_string(x = "PCA1.Andrews", y = "PCA2.Andrews", color = names(covs2)[i])) +
+    geom_point(show.legend = TRUE) +
+    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outlierspc1.Andrews) | mrna_id %in% rownames(outlierspc2.Andrews), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 10, # Reduce el número máximo de solapamientos
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = names(covs2)[i],
+         x = "PCA1.Andrews", y = "PCA2.Andrews", color = names(covs2)[i]) +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm"),
+      plot.margin = margin(5, 5, 5, 5)# Agrega un margen alrededor de la gráfica si es necesario
+    )
+
+  plots.pca.Andrews[[colnames(covs2)[i]]] <- p
+}
+
+grid.arrange(plots.pca.Andrews$study, plots.pca.Andrews$braaksc, ncol=1)
+
+grid.arrange(plots.pca.Andrews$ceradsc, plots.pca.Andrews$cogdx, ncol=1)
+
+grid.arrange(plots.pca.Andrews$apoe_genotype, plots.pca.Andrews$neuroStatus, ncol=1)
+```
 
 ## tSNE
 
@@ -832,25 +927,6 @@ tsne.Andrews.covs$Row.names <- NULL
 row.names(tsne.Andrews.covs) <- tsne.Andrews.covs$mrna_id
 ```
 
-```{r, fig.height=10, fig.width=10}
-plots <- list()
-
-# Itera sobre las columnas de covariables y añadir a la lista
-for (i in 3:ncol(tsne.Andrews.covs)) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(tsne.Andrews.covs, aes_string(x = names(tsne.Andrews.covs)[1], y = names(tsne.Andrews.covs)[2], color = names(tsne.Andrews.covs)[i])) +
-    geom_point() +
-    labs(title = names(tsne.Andrews.covs)[i],
-         x = names(tsne.Andrews.covs)[1], y = names(tsne.Andrews.covs)[2], color = names(tsne.Andrews.covs)[i]) +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
-    geom_point() 
-
-  plots[[colnames(tsne.Andrews.covs)[i]]] <- p
-}
-
-grid.arrange(plots$study, plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype, plots$neuroStatus, ncol=2)
-```
 
 ### Seleccionamos outliers
 
@@ -901,6 +977,8 @@ mtSNE12.Andrews <- mat_exp[(rownames(mat_exp) %in% rownames(outliers.tsne1.Andre
 
 not_in_tSNE12.Andrews <- mat_exp[!((rownames(mat_exp) %in% rownames(outliers.tsne1.Andrews)) | (rownames(mat_exp) %in% rownames(outliers.tsne2.Andrews))),]
 ```
+
+### Covariables en outliers
 
 ```{r}
 for (i in rownames(covs2)){
@@ -968,6 +1046,53 @@ grid.arrange(plots$study , plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe
 
 ```
 
+```{r}
+colnames(tsne.data.Andrews) <- c("tSNE1.Andrews", "tSNE2.Andrews")
+
+covs2 <- merge(covs2, tsne.data.Andrews, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
+
+```{r, fig.height=8, fig.width=6}
+plots.tsne.Andrews <- list()
+
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 3:13) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(covs2, aes_string(x = "tSNE1.Andrews", y = "tSNE2.Andrews", color = names(covs2)[i])) +
+    geom_point(show.legend = TRUE) +
+    geom_text_repel(aes(label=ifelse((covs2$mrna_id %in% rownames(outliers.tsne1.Andrews) | covs2$mrna_id %in% rownames(outliers.tsne2.Andrews)), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 30, # Reduce el número máximo de solapamientos
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = names(covs2)[i],
+         x = names(covs2)[28], y = names(covs2)[29], color = names(covs2)[i]) +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm"),
+      plot.margin = margin(5, 5, 5, 5)# Agrega un margen alrededor de la gráfica si es necesario
+    )
+
+  plots.tsne.Andrews[[colnames(covs2)[i]]] <- p
+}
+
+grid.arrange(plots.tsne.Andrews$study, plots.tsne.Andrews$braaksc, ncol=1)
+
+grid.arrange(plots.tsne.Andrews$ceradsc, plots.tsne.Andrews$cogdx, ncol=1)
+
+grid.arrange(plots.tsne.Andrews$apoe_genotype, plots.tsne.Andrews$neuroStatus, ncol=1)
+```
+
 ## UMAP
 
 ```{r}
@@ -984,26 +1109,6 @@ row.names(umap.data.Andrews) <- row.names(mat.expre.AD.Andrews)
 umap.data.covs.Andrews <- merge(umap.data.Andrews, covs2, by = "row.names")
 umap.data.covs.Andrews$Row.names <- NULL
 row.names(umap.data.covs.Andrews) <- umap.data.covs.Andrews$mrna_id
-```
-
-```{r, fig.height= 10, fig.width=10}
-plots <- list()
-
-# Itera sobre las columnas de covariables y añadir a la lista
-for (i in 3:ncol(umap.data.covs.Andrews)) {
-  # Crea una gráfica para cada variable
-  p <- ggplot(umap.data.covs.Andrews, aes_string(x = names(umap.data.covs.Andrews)[1], y = names(umap.data.covs.Andrews)[2], color = names(umap.data.covs.Andrews)[i])) +
-    geom_point() +
-    labs(title = names(umap.data.covs.Andrews)[i],
-         x = names(umap.data.covs.Andrews)[1], y = names(umap.data.covs.Andrews)[2], color = names(umap.data.covs.Andrews)[i]) +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
-    geom_point() 
-
-  plots[[colnames(umap.data.covs.Andrews)[i]]] <- p
-}
-
-grid.arrange(plots$study, plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype, plots$neuroStatus, ncol=2)
 ```
 
 ### Seleccionamos outliers
@@ -1055,6 +1160,8 @@ mUMAP12.Andrews <- mat_exp[(rownames(mat_exp) %in% rownames(outliers.umap1.Andre
 
 not_in_UMAP12.Andrews <- mat_exp[!((rownames(mat_exp) %in% rownames(outliers.umap1.Andrews)) | (rownames(mat_exp) %in% rownames(outliers.umap2.Andrews))),]
 ```
+
+### Covariables en outliers
 
 ```{r}
 for (i in rownames(covs2)){
@@ -1121,104 +1228,114 @@ for (i in 1:ncol(covs2)) {
 grid.arrange(plots$study , plots$braaksc,plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
 ```
 
+```{r}
+colnames(umap.data.Andrews) <- c("UMAP1.Andrews", "UMAP2.Andrews")
+
+covs2 <- merge(covs2, umap.data.Andrews, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
+
+
+```{r, fig.height=8, fig.width=6}
+plots.umap.Andrews <- list()
+
+# Itera sobre las columnas de covariables y añadir a la lista
+for (i in 3:13) {
+  # Crea una gráfica para cada variable
+  p <- ggplot(covs2, aes_string(x = "UMAP1.Andrews", y = "UMAP2.Andrews", color = names(covs2)[i])) +
+    geom_point(show.legend = TRUE) +
+    geom_text_repel(aes(label=ifelse((covs2$mrna_id %in% rownames(outliers.umap1.Andrews) | covs2$mrna_id %in% rownames(outliers.umap2.Andrews)), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 30, 
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = names(covs2)[i],
+         x = "UMAP1.Andrews", y = "UMAP2.Andrews", color = names(covs2)[i]) +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm"),
+      plot.margin = margin(5, 5, 5, 5)# Agrega un margen alrededor de la gráfica si es necesario
+    )
+
+  plots.umap.Andrews[[colnames(covs2)[i]]] <- p
+}
+
+grid.arrange(plots.umap.Andrews$study, plots.umap.Andrews$braaksc, ncol=1)
+
+grid.arrange(plots.umap.Andrews$ceradsc, plots.umap.Andrews$cogdx, ncol=1)
+
+grid.arrange(plots.umap.Andrews$apoe_genotype, plots.umap.Andrews$neuroStatus, ncol=1)
+```
+
 # Comparaciones
 
 ## Entre aproximaciones
 
-```{r}
-pca.kegg <- data.frame(pca_alz_genes_scaled$x[,0:2])
-pca.data.Andrews <- data.frame(pca.AD.Andrews$x[,0:2])
-
-colnames(pca.kegg) <- c("PC1 KEGG","PC2 KEGG")
-colnames(tsne.data) <- c("tSNE1 KEGG","tSNE2 KEGG")
-colnames(umap.data) <- c("UMAP1 KEGG","UMAP2 KEGG")
-colnames(pca.data.Andrews) <- c("PC1 Andrews","PC2 Andrews")
-colnames(tsne.data.Andrews) <- c("tSNE1 Andrews","tSNE2 Andrews")
-colnames(umap.data.Andrews) <- c("UMAP1 Andrews","UMAP2 Andrews")
-
-distancias <- data.frame(pca.kegg, tsne.data, umap.data, pca.data.Andrews, tsne.data.Andrews, umap.data.Andrews)
-
-covs2 <- merge(covs2, distancias, by = "row.names")
-rownames(covs2) <- covs2$Row.names
-covs2$Row.names <- NULL
-```
-
 ```{r, fig.height=10, fig.width=10}
-plots <- list()
-
-for (i in 20:ncol(covs2)) {
-  if (i %% 2){
-    next
-  } else {
-    p <- ggplot(covs2, aes_string(x = names(covs2)[i], y = names(covs2)[i+1], color = "neuroStatus")) +
-    geom_point() +
-    labs(title = names(covs2)[i],
-         x = names(covs2)[i], y = names(covs2)[i+1], color = "neuroStatus") +
-    modelr::geom_ref_line(h = 0) +
-    modelr::geom_ref_line(v = 0) +
-    geom_point() 
-    
-  plots[[colnames(covs2)[i]]] <- p
-  }
-}
-
-grid.arrange(plots$PC1.KEGG , plots$PC1.Andrews, plots$tSNE1.KEGG, plots$tSNE1.Andrews, plots$UMAP1.KEGG, plots$UMAP1.Andrews, ncol=2)
+grid.arrange(plots.pca.kegg$neuroStatus, plots.pca.Andrews$neuroStatus,plots.tsne.kegg$neuroStatus, plots.tsne.Andrews$neuroStatus, plots.umap.kegg$neuroStatus, plots.umap.Andrews$neuroStatus,ncol = 2)
 ```
 
 ## Muestras entre técnicas
 
 ```{r}
-max_length <- max(c(length(rownames(outlierspc1_scaled)), length(rownames(outlierspc2_scaled)), 
-                   length(rownames(outliers.tsne1)), length(rownames(outliers.tsne2)),
-                   length(rownames(outliers.umap1)), length(rownames(outliers.umap2)),
-                   length(rownames(outlierspc1.Andrews)), length(rownames(outlierspc2.Andrews)),
-                   length(rownames(outliers.tsne1.Andrews)), length(rownames(outliers.tsne2.Andrews)),
-                   length(rownames(outliers.umap1.Andrews)), length(rownames(outliers.umap2.Andrews))))
+all.outliers <- list(PCA.KEGG = c(rownames(outlierspc1_scaled), rownames(outlierspc2_scaled)),
+                     tSNE.KEGG = c(rownames(outliers.tsne1), rownames(outliers.tsne2)),
+                     UMAP.KEGG = c(rownames(outliers.umap1), rownames(outliers.umap2)),
+                     PCA.Andrews = c(rownames(outlierspc1.Andrews), rownames(outlierspc2.Andrews)),
+                     tSNE.Andrews = c(rownames(outliers.tsne1.Andrews), rownames(outliers.tsne2.Andrews)),
+                     UMAP.Andrews = c(rownames(outliers.umap1.Andrews), rownames(outliers.umap2.Andrews))
+)
 
-create_vector <- function(v) {
-    c(rownames(v), rep(NA, max_length - length(rownames(v))))
+max_length <- max(sapply(all.outliers, length))
+
+# Función para normalizar las longitudes de las listas
+normalize_length <- function(x, max_length) {
+  length(x) <- max_length  # Esto rellenará con NA si la lista es más corta que max_length
+  x
 }
 
-df <- data.frame(
-  outliers.kegg.pc1 = create_vector(outlierspc1_scaled),
-  outliers.kegg.pc2 = create_vector(outlierspc2_scaled),
-  outliers.kegg.tsne1 = create_vector(outliers.tsne1),
-  outliers.kegg.tsne2 = create_vector(outliers.tsne2),
-  outliers.kegg.umap1 = create_vector(outliers.umap1),
-  outliers.kegg.umap2 = create_vector(outliers.umap2),
-  outliers.Andrews.pc1 = create_vector(outlierspc1.Andrews),
-  outliers.Andrews.pc2 = create_vector(outlierspc2.Andrews),
-  outliers.Andrews.tsne1 = create_vector(outliers.tsne1.Andrews),
-  outliers.Andrews.tsne2 = create_vector(outliers.tsne2.Andrews),
-  outliers.Andrews.umap1 = create_vector(outliers.umap1.Andrews),
-  outliers.Andrews.umap2 = create_vector(outliers.umap2.Andrews)
-)
+# Aplicar la normalización a cada lista en 'all.outliers'
+all.outliers <- lapply(all.outliers, normalize_length, max_length = max_length)
+
+# Convertir la lista normalizada en un data.frame
+all.outliers <- data.frame(all.outliers)
+
+all.outliers
 ```
 
 ```{r, fig.height=10, fig.width=5}
 # Convertimos el data frame a un vector para hacer la tabla
-all_values <- unlist(df, use.names = FALSE)
+all_values.outliers <- unlist(all.outliers, use.names = FALSE)
 
 # Usamos table() para contar las frecuencias de cada muestra
-table_values <- table(all_values)
+table_values <- table(all_values.outliers)
 
 # Filtramos para mostrar solo las muestras que se repiten
 repeated_samples <- names(table_values[table_values > 1])
 
 # Unlist with names to track the original column of each value
-all_values_named <- unlist(df, use.names = TRUE)
+all_values_named <- unlist(all.outliers, use.names = TRUE)
 
 # Extract unique non-NA samples
 unique_samples <- unique(all_values_named[!is.na(all_values_named)])
 
 # Create an empty matrix to fill with presence (1) or absence (0)
-incidence_matrix <- matrix(0, nrow = length(unique_samples), ncol = length(df))
+incidence_matrix <- matrix(0, nrow = length(unique_samples), ncol = length(all.outliers))
 rownames(incidence_matrix) <- unique_samples
-colnames(incidence_matrix) <- names(df)
+colnames(incidence_matrix) <- names(all.outliers)
 
 # Populate the incidence matrix
-for (col in names(df)) {
-  present_samples <- df[[col]][!is.na(df[[col]])]  # Extract non-NA samples from column
+for (col in names(all.outliers)) {
+  present_samples <- all.outliers[[col]][!is.na(all.outliers[[col]])]  # Extract non-NA samples from column
   incidence_matrix[rownames(incidence_matrix) %in% present_samples, col] <- 1
 }
 
@@ -1254,17 +1371,18 @@ ggplot(summary_df, aes(x = sample, y = count, fill = count)) +  # Mostrar solo l
 ```
 
 ```{r, fig.height=15, fig.width=5}
-
 # Calcular el número total de presencias para cada muestra
 total_presences <- rowSums(incidence_matrix)
 melted_incidence_matrix$total_presence <- total_presences[as.character(melted_incidence_matrix$sample)]
+
+melted_incidence_matrix$column <- gsub(pattern = "outliers.", replacement = "", x = melted_incidence_matrix$column)
+
+melted_incidence_matrix$sample <- gsub(pattern = "_.*", replacement = "", x = melted_incidence_matrix$sample)
 
 filtered_data <- melted_incidence_matrix %>% 
   filter(presence == 1) %>%
   arrange(desc(total_presence)) %>%
   mutate(sample = factor(sample, levels = unique(sample)))
-
-filtered_data$column <- gsub(pattern = "outliers.", replacement = "", x = filtered_data$column)
 
 ggplot(filtered_data, aes(x = column, y = sample, size = total_presence)) +
   geom_point(color = "steelblue") +
@@ -1275,8 +1393,157 @@ ggplot(filtered_data, aes(x = column, y = sample, size = total_presence)) +
   labs(y = "Sample", x= "Dimension", title = "Presence of Samples Across Dimensions", size = "Total Presence")
 ```
 
-```{r}
+## Diagrama de Venn
 
+```{r}
+lista.outliers <- lapply(all.outliers, function(x) unique(na.omit(x)))
 ```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = lista.outliers[1:3],
+  category.names = c("PCA", "tSNE", "UMAP"),
+  filename = NULL,
+  output = FALSE,  
+  fill = c("#440154ff", '#21908dff', '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = c(10, -10, 0), #posicion de las categoricas
+  cat.dist = c(0.3, 0.35, 0.28), #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = paste0("Diagrama Venn KEGG geneset"),
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 0.9)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = lista.outliers[4:6],
+  category.names = c("PCA", "tSNE", "UMAP"),
+  filename = NULL,
+  output = FALSE,  
+  fill = c("#440154ff", '#21908dff', '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = c(10, -10, 0), #posicion de las categoricas
+  cat.dist = c(0.35, 0.1, 0.3), #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = paste0("Diagrama Venn Andrews geneset"),
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 0.9)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = lista.outliers[c(1,4)],
+  category.names = c("KEGG", "Andrews"),
+  filename = NULL,
+  output = FALSE,  
+  fill = c("#440154ff", '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = c(0, 0), #posicion de las categoricas
+  cat.dist = c(0.1, 0.1), #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = paste0("Diagrama Venn PCA geneset"),
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 0.9)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = lista.outliers[c(2,5)],
+  category.names = c("KEGG", "Andrews"),
+  filename = NULL,
+  output = FALSE,  
+  fill = c("#440154ff", '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = c(0, 0), #posicion de las categoricas
+  cat.dist = c(0.1, 0.1), #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = paste0("Diagrama Venn tSNE geneset"),
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 0.9)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = lista.outliers[c(3,6)],
+  category.names = c("KEGG", "Andrews"),
+  filename = NULL,
+  output = FALSE,  
+  fill = c("#440154ff", '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = c(0, 0), #posicion de las categoricas
+  cat.dist = c(0.1, 0.1), #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = paste0("Diagrama Venn UMAP geneset"),
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 0.9)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+
 
 
