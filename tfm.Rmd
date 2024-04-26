@@ -38,7 +38,7 @@ library(ggVennDiagram) # diagrama de Venn
 
 # Leyendo datos
 
-Descargar los datos 
+Descargar los datos. Escalo los datos de la matriz para tener homogeneidad en las representaciones.
 
 ```{r}
 # covariables
@@ -56,8 +56,9 @@ ROSMAP_RINPMIAGESEX_resids <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSID
 mat_exp <- scale(ROSMAP_RINPMIAGESEX_resids)
 ```
 
-
 # Geneset de alzheimer KEGG
+
+Descarga del geneset de KEGG 
 
 ```{r}
 # geneset de Alzheimer extraidos de KEGG
@@ -67,9 +68,7 @@ tab$Symbol <- mapIds(org.Hs.eg.db, tab$GeneID,
                        column="SYMBOL", keytype="ENTREZID")
 
 paths <- getKEGGPathwayNames(species="hsa")
-paths[paths$PathwayID=="hsa05010", ]
 geneset_alz <- tab$Symbol[tab$PathwayID=="hsa05010"]
-
 ```
 
 Vamos a seleccionar solamente los genes de Alzheimer de KEGG en nuestro dataset de expresión génica.
@@ -78,7 +77,7 @@ Vamos a seleccionar solamente los genes de Alzheimer de KEGG en nuestro dataset 
 mat_exp_alz_genes <- mat_exp[, colnames(mat_exp) %in% geneset_alz]
 ```
 
-Visualizamos si se han seleccionado todos los genes y cuantos del geneset de KEGG
+Visualizamos si se han seleccionado todos los genes y cuantos del geneset de KEGG. Nuestra matriz tiene 305 genes de un total 384 del geneset.
 
 ```{r}
 venn.plot <- venn.diagram(
@@ -115,7 +114,6 @@ grid.draw(venn.plot)
 pca_alz_genes_scaled <- prcomp(mat_exp_alz_genes)
 ```
 
-
 ```{r}
 # Scree plot con los datos escalados
 var_exp <- pca_alz_genes_scaled$sdev^2
@@ -139,9 +137,11 @@ ggplot(df_var_exp[1:20,], aes(x = Comp, y = VarExp)) +
   geom_text(data = df_cum_var_exp[seq(0,20,2),], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
-Vemos que con las 20 primeras no encontramos ni siquiera el 80% de la varianza.
+Vemos que con las 20 primeras no encontramos ni siquiera el 80% de la varianza. Las dos primeras PC tienen un 41% de la varizana explicada.
 
 ### Seleccionar muestras con el doble de la desviación típica
+
+Selecciono los outliers de las dos primeras PC con el doble de SD.
 
 ```{r}
 outlierspc1_scaled <- as.data.frame(pca_alz_genes_scaled$x[abs(pca_alz_genes_scaled$x[,1]) > 2*(pca_alz_genes_scaled$sdev[1]),1])
@@ -262,7 +262,7 @@ for (i in 1:ncol(covs2)) {
     p <- ggplot(filt, aes_string(x = names(covs2)[i], y = "percentage", fill = "sampleset_PCA")) +
         geom_bar(stat="identity", position=position_dodge()) +
         geom_text(aes(label=paste0(round(suma.total, 1), " %"), y = suma.total), label.size = 10, color = "black") +
-        labs(x = names(covs2)[i], y = "%", fill = "Sample Set PCA") +
+        labs(x = names(covs2)[i], y = "Percentage", fill = "Outliers") +
         theme_minimal() 
     
     if (length(unique(covs2[[i]])) >= 2) {
@@ -327,13 +327,6 @@ grid.arrange(plots.pca.kegg$apoe_genotype, plots.pca.kegg$neuroStatus, ncol=1)
 ```
 
 ## tSNE
-
-Parámetros clave en t-SNE:
-Perplexity (Perplejidad): Este es uno de los parámetros más importantes en t-SNE. La perplejidad se relaciona con el número de vecinos cercanos que t-SNE considera cuando mapea los datos. Un valor demasiado bajo hace que el modelo se concentre demasiado en la estructura local, mientras que un valor demasiado alto puede llevar a una visión global que pierde detalles. La elección óptima depende del tamaño del dataset, pero valores típicos están entre 5 y 50.
-
-Número de iteraciones: t-SNE es un algoritmo iterativo, y el número de iteraciones puede afectar la estabilidad de los resultados. Un número insuficiente de iteraciones puede resultar en una organización incompleta, mientras que demasiadas iteraciones pueden no proporcionar beneficios adicionales y aumentar el tiempo de cálculo.
-
-Tasa de aprendizaje: Este parámetro controla el tamaño del paso en cada actualización durante la optimización. Una tasa de aprendizaje muy baja puede hacer que el algoritmo tarde mucho en converger, mientras que una tasa demasiado alta puede llevar a una convergencia pobre.
 
 ```{r}
 set.seed(1234)
@@ -461,7 +454,7 @@ for (i in 1:ncol(covs2)) {
       mutate(total = sum(count), percentage = (count / total) * 100) %>%
       ggplot(aes_string(x = names(covs2)[i], y = "percentage", fill = "sampleset_tSNE")) +
       geom_bar(stat="identity", position=position_dodge()) +
-      labs(x = NULL, y = "%", fill = col_name) +
+      labs(x = names(covs2)[i], y = "Percentage", fill = "Outliers") +
       theme_minimal()
     
     plots[[colnames(covs2)[i]]] <- p
@@ -637,7 +630,7 @@ for (i in 1:ncol(covs2)) {
       mutate(total = sum(count), percentage = (count / total) * 100) %>%
       ggplot(aes_string(x = names(covs2)[i], y = "percentage", fill = "sampleset_UMAP")) +
       geom_bar(stat="identity", position=position_dodge()) +
-      labs(x = NULL, y = "%", fill = col_name) +
+      labs(x = names(covs2)[i], y = "Percentage", fill = "Outliers") +
       theme_minimal()
     
     plots[[colnames(covs2)[i]]] <- p
@@ -1079,7 +1072,7 @@ for (i in 1:ncol(covs2)) {
       mutate(total = sum(count), percentage = (count / total) * 100) %>%
       ggplot(aes_string(x = names(covs2)[i], y = "percentage", fill = "sampleset_tSNE_Andrews")) +
       geom_bar(stat="identity", position=position_dodge()) +
-      labs(x = NULL, y = "%", fill = col_name) +
+      labs(x = names(covs2)[i], y = "Percentage", fill = "Outliers") +
       theme_minimal()
     
     plots[[colnames(covs2)[i]]] <- p
