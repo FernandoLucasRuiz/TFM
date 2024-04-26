@@ -53,7 +53,7 @@ covs$neuroStatus <- as.factor(covs$neuroStatus)
 
 #datos corregidos 
 ROSMAP_RINPMIAGESEX_resids <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_resids.rds")
-mat_exp <- ROSMAP_RINPMIAGESEX_resids
+mat_exp <- scale(ROSMAP_RINPMIAGESEX_resids)
 ```
 
 
@@ -86,7 +86,7 @@ venn.plot <- venn.diagram(
   category.names = c("Matrix Genes", "Geneset Alzheimer"),
   filename = NULL,
   output = FALSE,  # Asegura que no se exporte a un archivo
-  fill = c("#00CED1", "#E9967A"),
+  fill = c("#440154ff", '#fde725ff'),
   cex = 1,  # Aumenta el tamaño del texto
   fontface = "bold",
   cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
@@ -112,7 +112,7 @@ grid.draw(venn.plot)
 ## PCA
 
 ```{r}
-pca_alz_genes_scaled <- prcomp(mat_exp_alz_genes, scale = T)
+pca_alz_genes_scaled <- prcomp(mat_exp_alz_genes)
 ```
 
 
@@ -245,22 +245,44 @@ plots <- list()
 # Itera sobre las columnas de covariables y añadir a la lista
 for (i in 1:ncol(covs2)) {
   col_name <- colnames(covs2)[i]
-  if (class(covs2[[i]]) == "character" | class(covs2[[i]]) == "numeric"){
+  
+  if (class(covs2[[i]]) == "character" | class(covs2[[i]]) == "numeric" ){
     next
   }
   if (class(covs2[[i]]) == "factor"){
-    p <- covs2 %>%
+    filt <- covs2 %>%
       group_by(across(all_of(col_name)), sampleset_PCA) %>%
       summarise(count = n(), .groups = 'drop') %>%
-      mutate(total = sum(count), percentage = (count / total) * 100) %>%
       filter(sampleset_PCA == "mPC1" | sampleset_PCA == "mPC2" | sampleset_PCA == "mPC1 and mPC2") %>%
-      ggplot(aes_string(x = names(covs2)[i], y = "percentage", fill = "sampleset_PCA")) +
-      geom_bar(stat="identity", position=position_dodge()) +
-      labs(x = NULL, y = "%", fill = col_name) +
-      theme_minimal()
+      mutate(total = sum(count), percentage = (count / total) * 100) %>%
+      group_by(across(all_of(col_name))) %>% 
+      mutate(suma.total = sum(percentage)) %>%
+      ungroup()
+    
+    p <- ggplot(filt, aes_string(x = names(covs2)[i], y = "percentage", fill = "sampleset_PCA")) +
+        geom_bar(stat="identity", position=position_dodge()) +
+        geom_text(aes(label=paste0(round(suma.total, 1), " %"), y = suma.total), label.size = 10, color = "black") +
+        labs(x = names(covs2)[i], y = "%", fill = "Sample Set PCA") +
+        theme_minimal() 
+    
+    if (length(unique(covs2[[i]])) >= 2) {
+      p <- p + 
+        geom_segment(aes(x = 1, xend = 1, y = 0, yend = suma.total[1]-1), color = "red", size = 3) 
+        p <- p + geom_segment(aes(x = 2, xend = 2, y = 0, yend = suma.total[3]-1), color = "red", size = 3)
+      if (length(unique(covs2[[i]])) >= 3){
+        p <- p + geom_segment(aes(x = 3, xend = 3, y = 0, yend = suma.total[5]-1), color = "red", size = 3)
+        if (length(unique(covs2[[i]])) >= 4) {
+          p <- p + geom_segment(aes(x = 4, xend = 4, y = 0, yend = suma.total[7]-1), color = "red", size = 3)
+          if (length(unique(covs2[[i]])) >= 5) {
+            p <- p + geom_segment(aes(x = 5, xend = 5, y = 0, yend = suma.total[9]-1), color = "red", size = 3)
+          }
+        }
+      }
+    } 
+  }
     
     plots[[colnames(covs2)[i]]] <- p
-  }
+  
 }
 
 grid.arrange(plots$study , plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
@@ -460,7 +482,7 @@ for (i in 3:13) {
     geom_point(show.legend = TRUE) +
     geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outliers.tsne1) | mrna_id %in% rownames(outliers.tsne2), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
                   color = "black",
-                  max.overlaps = 20, # Reduce el número máximo de solapamientos
+                  max.overlaps = 30, # Reduce el número máximo de solapamientos
                   point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
                   size = 3, 
                   fontface = "bold",
@@ -691,7 +713,7 @@ venn.plot <- venn.diagram(
   category.names = c("Matrix Genes", "Geneset Alzheimer"),
   filename = NULL,
   output = FALSE,  # Asegura que no se exporte a un archivo
-  fill = c("#00CED1", "#E9967A"),
+  fill = c("#440154ff", '#fde725ff'),
   cex = 1,  # Aumenta el tamaño del texto
   fontface = "bold",
   cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
@@ -717,7 +739,7 @@ grid.draw(venn.plot)
 ## PCA
 
 ```{r}
-pca.AD.Andrews <- prcomp(mat.expre.AD.Andrews, scale = T)
+pca.AD.Andrews <- prcomp(mat.expre.AD.Andrews)
 ```
 
 ```{r, echo=FALSE}
@@ -845,22 +867,44 @@ plots <- list()
 # Itera sobre las columnas de covariables y añadir a la lista
 for (i in 1:ncol(covs2)) {
   col_name <- colnames(covs2)[i]
-  if (class(covs2[[i]]) == "character" | class(covs2[[i]]) == "numeric"){
+  
+  if (class(covs2[[i]]) == "character" | class(covs2[[i]]) == "numeric" ){
     next
   }
   if (class(covs2[[i]]) == "factor"){
-    p <- covs2 %>%
+    filt <- covs2 %>%
       group_by(across(all_of(col_name)), sampleset_PCA_Andrews) %>%
       summarise(count = n(), .groups = 'drop') %>%
-      mutate(total = sum(count), percentage = (count / total) * 100) %>%
       filter(sampleset_PCA_Andrews == "mPC1" | sampleset_PCA_Andrews == "mPC2" | sampleset_PCA_Andrews == "mPC1 and mPC2") %>%
-      ggplot(aes_string(x = names(covs2)[i], y = "percentage", fill = "sampleset_PCA_Andrews")) +
-      geom_bar(stat="identity", position=position_dodge()) +
-      labs(x = NULL, y = "%", fill = col_name) +
-      theme_minimal()
+      mutate(total = sum(count), percentage = (count / total) * 100) %>%
+      group_by(across(all_of(col_name))) %>% 
+      mutate(suma.total = sum(percentage)) %>%
+      ungroup()
+    
+    p <- ggplot(filt, aes_string(x = names(covs2)[i], y = "percentage", fill = "sampleset_PCA_Andrews")) +
+        geom_bar(stat="identity", position=position_dodge()) +
+        geom_text(aes(label=paste0(round(suma.total, 1), " %"), y = suma.total), label.size = 10, color = "black") +
+        labs(x = names(covs2)[i], y = "%", fill = "Sample Set PCA") +
+        theme_minimal() 
+    
+    if (length(unique(covs2[[i]])) >= 2) {
+      p <- p + 
+        geom_segment(aes(x = 1, xend = 1, y = 0, yend = suma.total[1]-1), color = "red", size = 3) 
+        p <- p + geom_segment(aes(x = 2, xend = 2, y = 0, yend = suma.total[3]-1), color = "red", size = 3)
+      if (length(unique(covs2[[i]])) >= 3){
+        p <- p + geom_segment(aes(x = 3, xend = 3, y = 0, yend = suma.total[5]-1), color = "red", size = 3)
+        if (length(unique(covs2[[i]])) >= 4) {
+          p <- p + geom_segment(aes(x = 4, xend = 4, y = 0, yend = suma.total[7]-1), color = "red", size = 3)
+          if (length(unique(covs2[[i]])) >= 5) {
+            p <- p + geom_segment(aes(x = 5, xend = 5, y = 0, yend = suma.total[9]-1), color = "red", size = 3)
+          }
+        }
+      }
+    } 
+  }
     
     plots[[colnames(covs2)[i]]] <- p
-  }
+  
 }
 
 grid.arrange(plots$study , plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
@@ -1411,8 +1455,8 @@ venn.plot <- venn.diagram(
   cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
   cat.fontface = "bold",
   cat.default.pos = "text",
-  cat.pos = c(10, -10, 0), #posicion de las categoricas
-  cat.dist = c(0.3, 0.35, 0.28), #distancia de las categoricas
+  cat.pos = c(0, 0, 0), #posicion de las categoricas
+  cat.dist = 0.1, #distancia de las categoricas
   rotation.degree = 0, 
   margin = 0.1, # hacerla más pequeña
   lwd=0.5,
@@ -1436,16 +1480,16 @@ grid.text(label = paste(gsub("_.*","",interseccion_ABC), collapse = "\n"),
 
 interseccion_AB <- Reduce(intersect, lista.outliers[1:2])
 grid.text(label = paste(gsub("_.*","",interseccion_AB[!(interseccion_AB %in% interseccion_ABC)]), collapse = "\n"), 
-          x = 0.7, 
-          y = 0.3, 
+          x = 0.68, 
+          y = 0.33, 
           gp = gpar(fontsize = 8, 
                     col = "black",
                     fontface = "italic"))
 
-interseccion_BC <- Reduce(intersect, lista.outliers[2:3])
-grid.text(label = paste(gsub("_.*","",interseccion_BC[!(interseccion_BC %in% interseccion_ABC)]), collapse = "\n"), 
-          x = 0.32, 
-          y = 0.35, 
+interseccion_AC <- Reduce(intersect, lista.outliers[c(1,3)])
+grid.text(label = paste(gsub("_.*","",interseccion_AC[!(interseccion_AC %in% interseccion_ABC)]), collapse = "\n"), 
+          x = 0.365, 
+          y = 0.25, 
           gp = gpar(fontsize = 8, 
                     col = "black",
                     fontface = "italic"))
@@ -1463,8 +1507,8 @@ venn.plot <- venn.diagram(
   cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
   cat.fontface = "bold",
   cat.default.pos = "text",
-  cat.pos = c(10, -10, 0), #posicion de las categoricas
-  cat.dist = c(0.35, 0.1, 0.3), #distancia de las categoricas
+  cat.pos = c(0, 0, 0), #posicion de las categoricas
+  cat.dist = c(0.1, 0.1, -0.05), #distancia de las categoricas
   rotation.degree = 0, 
   margin = 0.1, # hacerla más pequeña
   lwd=0.5,
@@ -1473,7 +1517,7 @@ venn.plot <- venn.diagram(
   main = paste0("Diagrama Venn Andrews geneset"),
   main.fontface= "bold", 
   main.cex = 2,
-  main.pos = c(0.5, 0.9)
+  main.pos = c(0.5, 1)
 )
 
 interseccion_ABC <- Reduce(intersect, lista.outliers[4:6])
@@ -1498,6 +1542,14 @@ interseccion_BC <- Reduce(intersect, lista.outliers[5:6])
 grid.text(label = paste(gsub("_.*","",interseccion_BC[!(interseccion_BC %in% interseccion_ABC)]), collapse = "\n"), 
           x = 0.68, 
           y = 0.4, 
+          gp = gpar(fontsize = 8, 
+                    col = "black",
+                    fontface = "italic"))
+
+interseccion_AB <- Reduce(intersect, lista.outliers[4:5])
+grid.text(label = paste(gsub("_.*","",interseccion_AB[!(interseccion_AB %in% interseccion_ABC)]), collapse = "\n"), 
+          x = 0.56, 
+          y = 0.7, 
           gp = gpar(fontsize = 8, 
                     col = "black",
                     fontface = "italic"))
