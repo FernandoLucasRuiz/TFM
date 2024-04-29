@@ -1656,6 +1656,69 @@ grid.text(label = paste(gsub("_.*","",interseccion_AB), collapse = "\n"),
                     fontface = "italic"))
 ```
 
+# Autoencoder
+
+```{r}
+library(keras)
+library(tensorflow)
+library(caret)
+
+# Suponiendo que 'exp_matrix' es tu matriz de expresión
+mat_exp <- scale(ROSMAP_RINPMIAGESEX_resids)
+mat_exp_alz_genes <- mat_exp[, colnames(mat_exp) %in% geneset_alz]
+exp_matrix <- mat_exp_alz_genes 
+exp_matrix <- cbind(exp_matrix, neuroStatus = covs$neuroStatus)
+
+#data partition
+split_ind <-  caret::createDataPartition(exp_matrix[,306], p = 0.8,list = FALSE)
+
+train <- exp_matrix[split_ind,]
+test <- exp_matrix[-split_ind,]
+
+train_X <- train %>% as.matrix()
+
+test_X <- test %>% as.matrix()
+
+# Dimensiones
+input_dim <- ncol(exp_matrix)
+encoding_dim <- 32  # Puedes ajustar esto según la complejidad de tus datos
+
+# Definir el modelo
+input_layer <- layer_input(shape = input_dim)
+encoder <- input_layer %>%
+  layer_dense(units = encoding_dim, activation = 'relu')
+decoder <- encoder %>%
+  layer_dense(units = input_dim, activation = 'sigmoid')
+
+autoencoder <- keras_model(inputs = input_layer, outputs = decoder)
+
+# Compilar el modelo
+compile(autoencoder, optimizer = 'adam', loss = 'mean_squared_error', metrics = c('accuracy'))
+
+summary(autoencoder)
+
+history <- autoencoder %>% fit(
+  train_X, train_X,  # entrada y salida son la misma matriz
+  epochs = 100,             # número de iteraciones sobre el conjunto de datos completo
+  shuffle = TRUE,
+  validation_data= list(test_X, test_X)
+)
+plot(history)
+# Predicciones (reconstrucciones)
+reconstructions <- autoencoder %>% predict(exp_matrix)
+
+plot(reconstructions[,1], reconstructions[,2], xlab = "Dimensión 1", ylab = "Dimensión 2", main = "Espacio Latente de Autoencoder")
+
+
+# Error de reconstrucción
+mse <- rowSums((exp_matrix - reconstructions)^2) / ncol(exp_matrix)
+
+# Determinar un umbral
+threshold <- mean(mse) + 2*sd(mse)  # umbral común, ajustable según tus necesidades
+
+# Identificar outliers
+outliers <- which(mse > threshold)
+```
 
 
 
