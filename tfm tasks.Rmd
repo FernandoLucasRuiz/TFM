@@ -60,8 +60,6 @@ The Memory and Aging Project (MAP) is a longitudinal, epidemiologic clinical-pat
 
 # TO DO
 
-## Alzheimer
-
 -   [x] clustering con KEGG genes
 
 -   [x] clustering con WGCNA genomewide
@@ -74,9 +72,43 @@ The Memory and Aging Project (MAP) is a longitudinal, epidemiologic clinical-pat
 
 -   [x] No utilizar test estadísticos porque las dimensiones de los no outliers impide la significancia estadística
 
--   [ ] Limpiar código
+-   [ ] Ordenar por mecanismos según correo Botía.
 
--   [ ] 
+    -   [x] Mecanismo de filtrado
+
+        -   [x] KEGG
+
+        -   [x] Andrews
+
+    -   [x] Mecanismo de detección de outliers
+
+        -   [x] KEGG
+
+        -   [x] Andrews
+
+    -   [ ] Mecanismo de anotación basado en diferencias
+
+        -   [x] KEGG
+
+        -   [x] Andrews
+
+    -   [x] Mecanismo de anotación dependiente del mecanismo de detección
+
+        -   [x] KEGG
+
+        -   [x] Andrews
+
+-   [x] Hacer one-hot encoding de las variables categóricas de las covariables
+
+-   [x] Diferenciar entre mPC1pos y mPC1neg.
+
+    -   [x] KEGG
+
+    -   [x] Andrews
+
+-   [x] Calcular ratio de las covariables.
+
+-   [ ] Limpiar código
 
 ------------------------------------------------------------------------
 
@@ -188,7 +220,7 @@ Tendrías que coger la matriz de expresión de ROSMAP, quedarte solo con los gen
 
 Cualquier cosa nos dices.
 
-## Alicia 
+## Alicia
 
 Hola,
 
@@ -223,3 +255,49 @@ Cuando tengas esto, podemos quedar para discutir cosas más concretas de los res
 Saludos,
 
 Alicia.
+
+## Reunión 2024-04-30
+
+Tenemos que comparar los resultados de las covariables de los outliers con los no outliers de cada técnica. Para ello tenemos que calcular el ratio del ratio de cada covariable entre outliers y no outliers. Es decir, por ejemplo:
+
+$log2((ROS/MAP)outliers/(ROS/MAP) no outliers)$
+
+Si son vas clases pues todas contra la 1.
+
+Por otro lado tenemos que diferenciar entre las muestras que son outliers de una componente entre positivos y negativos, ya que se separan por cosas distintas.
+
+## Botia 2024-04-30
+
+Por centrar un poco el TFM, debería haberlo escrito mucho antes pero no me da para más. Lo siento.
+
+Título: Detección de covariables discriminantes en grupos de variables
+
+Definición del problema
+
+Tenemos una matriz de predictores biológicos, que es de alta dimensionalidad sobre individuos. Sea Mnxm dicha matriz, en donde n es el número de individuos y m es el número de predictores diferentes (pueden ser genes, sondas de metilación, proteínas, da igual). Tenemos también una matriz de datos clínicos sobre los n individuos, Cnxd en donde d es el número de dimensiones de esta matriz. En esta matriz, todas las d variables son numéricas. Además, tenemos una segunda matriz de datos clínicos C’nxd’ en donde cada una de las d’ columnas es de naturaleza binaria (e.g, sexo, caso/control). Nótese que si originalmente tuviéramos alguna columna categórica con más de 2 valores, la transformamos a una codificación one-hot generándose tantas variables en C’ como valores posibles puede tener la variable original. Entonces, C’nxd’ es tal que todas sus columnas son de naturaleza binaria porque han pasado por un proceso de conversión desde k-arias a binarias mediante one-hot. 
+
+Por otro lado, tenemos un mecanismo de filtrado de la matriz Mnxm para convertirla en una matriz Mnxm’, con m’ \<\< n. Ese filtrado no transforma los datos, solo filtra predictores. El mecanismo de filtrado concreto dependerá del tipo de predictor que tengamos en M. Por ejemplo, si M es una matriz de genes, en lugar de usar toda una matriz de genes, podemos quedarnos con los genes asociados al Alzheimer según KEGG. A esto lo denominamos un geneset de M. Podemos tener tantos genesets como queramos. Cada geneset es interesante para aprender sobre los individuos de M desde ese fenómeno biológico específico. El ejemplo de KEGG me permite estudiar a los individuos desde el punto de vista de la influencia del Alzheimer en esos genes. Pero si en lugar de ese geneset hubiéramos escogido uno relacionado con marcadores de microglia, podríamos haber estudiado a los individuos en base la microglía. 
+
+Nuestro problema es el siguiente: dado el geneset G, ¿tiene alguna utilidad como grupo de marcadores multivariable a la hora de organizar a los individuos de mi cohorte? ¿qué me dicen estos marcadores sobre los individuos extremos de esa cohorte?
+
+La forma de resolverlo que proponemos aquí es la siguiente.
+
+Dado dicho geneset G de M, queremos descubrir sujetos extremos en las filas de M, para ese geneset. Los sujetos extremos para ese geneset son aquellos que estarán más afectados según los predictores de M porque presentan más varianza. Dado el mecanismo para detectar esos sujetos extremos, posteriormente debemos explicar qué los hace extremos. Es decir, por un lado tenemos un mecanismo para detectar los sujetos más extremos. Llamémoslo mecanismo para detección de outliers multivariante (en donde cada una de las variables es un gen de nuestro geneset). Por otro lado tenemos, para dicho mecanimo de detección de outliers multivariante, una técnica para explicar por qué esos sujetos son extremos. Llamémoslo mecanismo de anotación de outliers. Uno de esos mecanismos, que es independiente de qué mecanismo de detección usamos y por tanto podemos usarlo siempre, es el basado en las diferencias entre outliers y no outliers. Lo llamaremos anotación de outliers basado en diferencias. Y es el que hemos hablado de los ratios. Analizamos los ratios para cada variable en C y C’. El otro mecanismo dependerá de si el mecanismo de detección nos da alguna forma de interpretar los outliers. Por ejemplo el PCA puede interpretar los outliers mirando a los vectores de carga (loadings) de los PCs. A este lo llamaremos mecanismo de anotación dependiente del mecanismo de detección.
+
+Vamos a experimentar sobre diferentes combinaciones de los siguientes tres elementos.
+
+Mecanismo de filtrado (cualquier geneset guiado por una hipótesis biológica, por ejemplo los genes de GWAS de AD, los de KEGG de AD o los de cualquier grupo de genes asociados de alguna forma a la neuro-degeneración.
+
+Mecanismo de detección de outliers (PCA, UMAP, t-SNE, son todos basados en transformaciones de los datos originales en otra cosa)
+
+Mecanismo de anotación basado en diferencias (aquí no hay posibilidades, solo está el mecanismo de los ratios)
+
+Mecanismo de anotación dependiente del mecanismo de detección (PCA: mirar a los loadings y ver qué genes son relevantes en cada eje)
+
+¿OK?
+
+Esto lo he escrito para centrar el TFM.
+
+Por un lado estamos combinando preguntas sobre el Alzheimer con preguntas sobre técnicas. Nuestra estrategia se basa en ver qué preguntas sobre el Alzheimer se contestan mejor según la técnica.
+
+Salu2

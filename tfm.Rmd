@@ -1,5 +1,5 @@
 ---
-title: "TFM Alzheimer"
+title: "Detección de covariables discriminantes en grupos de variables"
 author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
 date: "`r Sys.Date()`"
 output:
@@ -178,26 +178,36 @@ grid.arrange(plot1, plot2, ncol = 1)
 ```
 
 ```{r}
-mPC1_scaled <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc1_scaled),]
-mPC2_scaled <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc2_scaled),]
-mPC12_scaled <- mat_exp[(rownames(mat_exp) %in% rownames(outlierspc2_scaled)) & (rownames(mat_exp) %in% rownames(outlierspc1_scaled)),]
+mPC1.pos <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc1_scaled[outlierspc1_scaled[, 1] > 0 , , drop = F]),]
+mPC1.neg <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc1_scaled[outlierspc1_scaled[, 1] < 0 , , drop = F ]),]
 
-not_in_PC12_scaled <- mat_exp[!((rownames(mat_exp) %in% rownames(outlierspc2_scaled)) | (rownames(mat_exp) %in% rownames(outlierspc1_scaled))),]
+mPC2.pos <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc2_scaled[outlierspc2_scaled[, 1] > 0 , , drop = F ]),]
+mPC2.neg <- mat_exp[rownames(mat_exp) %in% rownames(outlierspc2_scaled[outlierspc2_scaled[, 1] < 0 , , drop = F]),]
+
+# mPC12_scaled <- mat_exp[(rownames(mat_exp) %in% rownames(outlierspc2_scaled)) & (rownames(mat_exp) %in% rownames(outlierspc1_scaled)),]
+
+not_in_mPC12 <- mat_exp[!((rownames(mat_exp) %in% rownames(mPC1.pos)) | (rownames(mat_exp) %in% rownames(mPC1.neg)) | (rownames(mat_exp) %in% rownames(mPC2.pos)) | (rownames(mat_exp) %in% rownames(mPC2.neg))),]
 ```
 
 ```{r}
 # Asegurarse de que todos son vectores del mismo largo para el dataframe final
-max_length <- max(length(rownames(mPC1_scaled)), length(rownames(mPC2_scaled)), length(rownames(mPC12_scaled)))
+max_length <- max(length(rownames(mPC1.pos)),
+                  length(rownames(mPC1.neg)),
+                  length(rownames(mPC2.pos)), 
+                  length(rownames(mPC2.neg)))
 
 # Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
-rownames_mPC1_scaled <- c(rownames(mPC1_scaled), rep("", max_length - length(rownames(mPC1_scaled))))
-rownames_mPC2_scaled <- c(rownames(mPC2_scaled), rep("", max_length - length(rownames(mPC2_scaled))))
-rownames_mPC12_scaled <- c(rownames(mPC12_scaled), rep("", max_length - length(rownames(mPC12_scaled))))
+rownames_mPC1.pos <- c(rownames(mPC1.pos), rep("", max_length - length(rownames(mPC1.pos))))
+rownames_mPC1.neg <- c(rownames(mPC1.neg), rep("", max_length - length(rownames(mPC1.neg))))
+rownames_mPC2.pos <- c(rownames(mPC2.pos), rep("", max_length - length(rownames(mPC2.pos))))
+rownames_mPC2.neg <- c(rownames(mPC2.neg), rep("", max_length - length(rownames(mPC2.neg))))
+
 
 final_table <- data.frame(
-  mPC1 = rownames_mPC1_scaled,
-  mPC2 = rownames_mPC2_scaled,
-  mPC1_and_PC2 = rownames_mPC12_scaled
+  mPC1.pos = rownames_mPC1.pos,
+  mPC1.neg = rownames_mPC1.neg,
+  mPC2.pos = rownames_mPC2.pos,
+  mPC2.neg = rownames_mPC2.neg
 )
 
 final_table
@@ -213,16 +223,19 @@ rownames(covs) <- covs$mrna_id
 covs2 <- covs
 
 for (i in rownames(covs2)){
-  if (i %in% rownames(mPC1_scaled) & !(i %in% rownames(mPC12_scaled))){
-    covs2[i, "sampleset_PCA"] <- "mPC1"
+  if (i %in% rownames(mPC1.pos) ){
+    covs2[i, "sampleset_PCA"] <- "mPC1 positive"
   }
-  if (i %in% rownames(mPC2_scaled) & !(i %in% rownames(mPC12_scaled))){
-    covs2[i, "sampleset_PCA"] <- "mPC2"
+  if (i %in% rownames(mPC1.neg)){
+    covs2[i, "sampleset_PCA"] <- "mPC1 negative"
   }
-  if (i %in% rownames(mPC12_scaled)){
-    covs2[i, "sampleset_PCA"] <- "mPC1 and mPC2"
+  if (i %in% rownames(mPC2.pos) ){
+    covs2[i, "sampleset_PCA"] <- "mPC2 positive"
   }
-  if (!(i %in% rownames(mPC1_scaled)) & !(i %in% rownames(mPC2_scaled))){
+  if (i %in% rownames(mPC2.neg)){
+    covs2[i, "sampleset_PCA"] <- "mPC2 negative"
+  }
+  if (!(i %in% rownames(mPC1.pos)) & !(i %in% rownames(mPC1.neg)) & !(i %in% rownames(mPC2.pos)) & !(i %in% rownames(mPC2.neg))){
     covs2[i, "sampleset_PCA"] <- "Not in both"
   }
 }
@@ -253,7 +266,7 @@ for (i in 1:ncol(covs2)) {
     filt <- covs2 %>%
       group_by(across(all_of(col_name)), sampleset_PCA) %>%
       summarise(count = n(), .groups = 'drop') %>%
-      filter(sampleset_PCA == "mPC1" | sampleset_PCA == "mPC2" | sampleset_PCA == "mPC1 and mPC2") %>%
+      filter(sampleset_PCA == "mPC1 positive" | sampleset_PCA == "mPC1 negative" | sampleset_PCA == "mPC2 positive" | sampleset_PCA == "mPC2 negative") %>%
       mutate(total = sum(count), percentage = (count / total) * 100) %>%
       group_by(across(all_of(col_name))) %>% 
       mutate(suma.total = sum(percentage)) %>%
@@ -287,6 +300,7 @@ for (i in 1:ncol(covs2)) {
 
 grid.arrange(plots$study , plots$braaksc, plots$ceradsc, plots$cogdx, plots$apoe_genotype,  plots$neuroStatus, ncol=2)
 ```
+
 ```{r, fig.height=8, fig.width=6}
 plots.pca.kegg <- list()
 
