@@ -1,0 +1,668 @@
+---
+title: "Detección de covariables discriminantes en grupos de variables"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+  pdf_document:
+    toc: true
+subtitle: Master en Bioinformática, Universidad de Murcia
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+```{r}
+library(tidyverse) # Colección de paquetes para ciencia de datos (incluye ggplot2, dplyr, tidyr, readr, purrr, tibble)
+library(reshape) # Herramientas para reorganizar datos
+library(Hmisc) # resúmenes estadísticos
+library(limma) # Análisis de datos de expresión genética
+library(AnnotationDbi) # Interfaz para bases de datos de anotaciones bioinformáticas
+library(org.Hs.eg.db) # Datos de anotación para genes humanos
+library(VennDiagram) # Generación de diagramas de Venn 
+library(gridExtra) # Mostrar varias gráficas
+library(patchwork) # Combinar múltiples ggplots en un único plot
+library(ggrepel) # Mejora la visualización de texto en ggplots evitando solapamientos de texto
+library(Rtsne) # Implementación de t-SNE
+library(umap) # Implementación de UMAP
+library(ggVennDiagram) # diagrama de Venn
+library(fastDummies)  # Para realizar el one-hot encoding
+```
+
+# Leyendo datos
+
+Descargar los datos. Escalo los datos de la matriz para tener homogeneidad en las representaciones.
+
+```{r}
+# covariables
+ROSMAP_RINPMIAGESEX_covs <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_covs.rds")
+covs <- ROSMAP_RINPMIAGESEX_covs
+rownames(covs) <- covs$mrna_id
+covs$study <- as.factor(covs$study)
+covs$projid <- as.character(covs$projid)
+covs$ceradsc <- as.factor(covs$ceradsc)
+covs$cogdx <- as.factor(covs$cogdx)
+covs$neuroStatus <- as.factor(covs$neuroStatus)
+
+#datos corregidos 
+ROSMAP_RINPMIAGESEX_resids <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_resids.rds")
+mat_exp <- scale(ROSMAP_RINPMIAGESEX_resids)
+```
+
+One-hot encoding de la matriz de covariables
+
+```{r}
+covs2 <- data.frame(matrix(ncol = 0, nrow = nrow(covs))) # Hago un dataframe vacio para meter los datos procesados
+
+for (colname in names(covs)) {
+  if (is.factor(covs[[colname]]) & length(levels(covs[[colname]])) > 2) {
+
+    dummy_df <- dummy_cols(covs[colname],
+                           remove_selected_columns = TRUE) # quitar las variables iniciales
+    
+    dummy_df <- data.frame(lapply(dummy_df, factor))
+
+    covs2 <- cbind(covs2, dummy_df)
+
+  } else {
+
+    covs2[[colname]] <- covs[[colname]] # si son numéricas o de otra clase, las añadimos igual
+  }
+}
+rownames(covs2) <- covs2$mrna_id
+covs2
+```
+
+
+# Geneset de alzheimer KEGG
+
+## Mecanismos de filtrado
+
+Filtrar la matriz Mnxm a Mnxm’, con m’ << n para filtrar los predictores, en este caso de la matriz de expresión mat_exp. 
+
+```{r}
+# geneset de Alzheimer extraidos de KEGG
+
+tab <- getGeneKEGGLinks(species="hsa")
+tab$Symbol <- mapIds(org.Hs.eg.db, tab$GeneID,
+                       column="SYMBOL", keytype="ENTREZID")
+
+paths <- getKEGGPathwayNames(species="hsa")
+geneset_alz <- tab$Symbol[tab$PathwayID=="hsa05010"]
+```
+
+```{r}
+mat_exp_alz_genes <- mat_exp[, colnames(mat_exp) %in% geneset_alz]
+```
+
+Visualizamos si se han seleccionado todos los genes y cuantos del geneset de KEGG. Nuestra matriz tiene 305 genes de un total 384 del geneset.
+
+```{r}
+venn.plot <- venn.diagram(
+  x = list(GenesMatriz = colnames(mat_exp), GenesetAlzheimer = geneset_alz),
+  category.names = c("Matrix Genes", "Geneset Alzheimer"),
+  filename = NULL,
+  output = FALSE,  # Asegura que no se exporte a un archivo
+  fill = c("#440154ff", '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = 25, #posicion de las categoricas
+  cat.dist = 0.1, #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = "Alzheimer genes in exp matrix",
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 1)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+## Mecanismo de detección de outliers 
+
+### PCA
+
+```{r}
+pca_KEGG <- prcomp(mat_exp_alz_genes)
+```
+
+```{r}
+# Scree plot con los datos escalados
+var_exp <- pca_KEGG$sdev^2
+prop_var_exp <- var_exp / sum(var_exp)
+cum_var_exp <- cumsum(prop_var_exp)
+
+df_var_exp <- data.frame(Comp = 1:length(prop_var_exp), VarExp = prop_var_exp)
+df_cum_var_exp <- data.frame(Comp = 1:length(cum_var_exp), CumVarExp = cum_var_exp)
+
+ggplot(df_var_exp[1:20,], aes(x = Comp, y = VarExp)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_line(aes(group = 1), color = "blue") +
+  geom_point(color = "blue") +
+  theme_minimal() +
+  labs(x = "Principal components", y = "Variance", title = "Scree Plot scaled") +
+  ylim(c(0,1)) +
+  geom_line(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
+  geom_point(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), color = "red") +
+  geom_bar(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
+  annotate("text", x = 4, y = 0.85, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
+  geom_text(data = df_cum_var_exp[seq(0,20,2),], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
+```
+
+#### Seleccionar muestras extremas para las dos primeras PC
+
+Selecciono los outliers de las dos primeras PC con el doble de SD.
+
+```{r}
+outlierspc1 <- as.data.frame(pca_KEGG$x[abs(pca_KEGG$x[,1]) > 2*(pca_KEGG$sdev[1]),1])
+
+outlierspc2 <- as.data.frame(pca_KEGG$x[abs(pca_KEGG$x[,2]) > 2*(pca_KEGG$sdev[2]),2])
+```
+
+```{r}
+df <- as.data.frame(pca_KEGG$x)
+
+plot1 <- ggplot(df, aes(x = PC1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean(df$PC1) + 2*pca_KEGG$sdev[1], linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(df$PC1) - 2*pca_KEGG$sdev[1], linetype = "dashed", color = "blue") +
+  labs(title = "PC1 density with 2*SD scaled PCA") +
+  geom_text(data = outlierspc1, 
+            aes(x = outlierspc1[,1], y= 0, label = rownames(outlierspc1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(pca_KEGG$x), aes(x= PC1, y = 0), color= ifelse(abs(pca_KEGG$x[,1]) > 2*(pca_KEGG$sdev[1]), "#8B1A1A", "grey")) +
+  theme_minimal()
+
+plot2 <- ggplot(df, aes(x = PC2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean(df$PC2) + 2*pca_KEGG$sdev[2], linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(df$PC2) - 2*pca_KEGG$sdev[2], linetype = "dashed", color = "blue") +
+  labs(title = "PC2 density with 2*SD scaled PCA") +
+  geom_text(data = outlierspc2, 
+            aes(x = outlierspc2[,1], y= 0, label = rownames(outlierspc2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(pca_KEGG$x), aes(x= PC2, y = 0), color= ifelse(abs(pca_KEGG$x[,2]) > 2*(pca_KEGG$sdev[2]), "#8B1A1A", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1, plot2, ncol = 1)
+```
+
+```{r}
+mPC1.pos <- rownames(outlierspc1[outlierspc1[, 1] > 0 , , drop = F])
+mPC1.neg <- rownames(outlierspc1[outlierspc1[, 1] < 0 , , drop = F ])
+
+mPC2.pos <- rownames(outlierspc2[outlierspc2[, 1] > 0 , , drop = F ])
+mPC2.neg <- rownames(outlierspc2[outlierspc2[, 1] < 0 , , drop = F])
+```
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(mPC1.pos),
+                  length(mPC1.neg),
+                  length(mPC2.pos), 
+                  length(mPC2.neg))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_mPC1.pos <- c(mPC1.pos, rep("", max_length - length(mPC1.pos)))
+rownames_mPC1.neg <- c(mPC1.neg, rep("", max_length - length(mPC1.neg)))
+rownames_mPC2.pos <- c(mPC2.pos, rep("", max_length - length(mPC2.pos)))
+rownames_mPC2.neg <- c(mPC2.neg, rep("", max_length - length(mPC2.neg)))
+
+
+final_table <- data.frame(
+  mPC1.pos = rownames_mPC1.pos,
+  mPC1.neg = rownames_mPC1.neg,
+  mPC2.pos = rownames_mPC2.pos,
+  mPC2.neg = rownames_mPC2.neg
+)
+
+final_table
+
+```
+
+### tSNE
+
+```{r}
+set.seed(1234)
+tsne <- Rtsne(mat_exp_alz_genes, dims = 2, theta = 0.0)
+
+tsne.data <- as.data.frame(tsne$Y)
+row.names(tsne.data) <- row.names(mat_exp_alz_genes)
+tsne.data.covs <- merge(tsne.data, covs, by = "row.names")
+tsne.data.covs$Row.names <- NULL
+row.names(tsne.data.covs) <- tsne.data.covs$mrna_id
+```
+
+#### Seleccionamos outliers
+
+```{r}
+rownames(tsne.data) <- rownames(mat_exp_alz_genes)
+
+# Calcular la media y la desviación estándar para cada componente de t-SNE
+mean.tsne1 <- mean(tsne.data[,1])
+sd.tsne1 <- sd(tsne.data[,1])
+mean.tsne2 <- mean(tsne.data[,2])
+sd.tsne2 <- sd(tsne.data[,2])
+
+# Identificar muestras a más de 2 desviaciones estándar de la media
+outliers.tsne1 <- tsne.data[abs(tsne.data[,1] - mean.tsne1) > 2 * sd.tsne1, ]
+outliers.tsne2 <-tsne.data[abs(tsne.data[,2] - mean.tsne2) > 2 * sd.tsne2, ]
+```
+
+```{r, echo=F}
+plot1 <- ggplot(tsne.data, aes(x = V1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.tsne1 + 2*sd.tsne1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.tsne1 - 2*sd.tsne1, linetype = "dashed", color = "blue") +
+  labs(title = "tSNE1 density with 2*SD tSNE") +
+  geom_text(data = outliers.tsne1, 
+            aes(x = outliers.tsne1[,1], y= 0, label = rownames(outliers.tsne1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(tsne$Y), aes(x= V1, y = 0), color= ifelse(abs(tsne$Y[,1]) > 2*sd.tsne1, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+plot2 <- ggplot(tsne.data, aes(x = V2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.tsne2 + 2*sd.tsne2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.tsne2 - 2*sd.tsne2, linetype = "dashed", color = "blue") +
+  labs(title = "tSNE2 density with 2*SD tSNE") +
+  geom_text(data = outliers.tsne2, 
+            aes(x = outliers.tsne2[,2], y= 0, label = rownames(outliers.tsne2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(tsne$Y), aes(x= V2, y = 0), color= ifelse(abs(tsne.data[,2]) > 2*sd.tsne2, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1, plot2, ncol = 1)
+```
+
+```{r}
+mtSNE1.pos <- rownames(outliers.tsne1[outliers.tsne1[, 1] > 0, , drop = F])
+
+mtSNE1.neg <- rownames(outliers.tsne1[outliers.tsne1[, 1] < 0, , drop = F])
+
+mtSNE2.pos <- rownames(outliers.tsne2[outliers.tsne2[, 1] > 0, , drop = F])
+
+mtSNE2.neg <- rownames(outliers.tsne2[outliers.tsne2[, 1] < 0, , drop = F])
+```
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(mtSNE1.pos),
+                  length(mtSNE1.neg),
+                  length(mtSNE2.pos), 
+                  length(mtSNE2.neg))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_mtSNE1.pos <- c(mtSNE1.pos, rep("", max_length - length(mtSNE1.pos)))
+rownames_mtSNE1.neg <- c(mtSNE1.neg, rep("", max_length - length(mtSNE1.neg)))
+rownames_mtSNE2.pos <- c(mtSNE2.pos, rep("", max_length - length(mtSNE2.pos)))
+rownames_mtSNE2.neg <- c(mtSNE2.neg, rep("", max_length - length(mtSNE2.neg)))
+
+
+final_table <- data.frame(
+  mtSNE1.pos = rownames_mtSNE1.pos,
+  mtSNE1.neg = rownames_mtSNE1.neg,
+  mtSNE2.pos = rownames_mtSNE2.pos,
+  mtSNE2.neg = rownames_mtSNE2.neg
+)
+
+final_table
+```
+
+### UMAP
+
+```{r}
+local.config <- umap.defaults
+# local.config$n_neighbors <- 4
+# local.config$n_components <- 2
+# local.config$n_epochs <- 100
+# local.config$metric<- "euclidean"
+set.seed(1234)
+umap.ad <- umap(mat_exp_alz_genes,random_stage=1234, local.config)
+
+umap.data <- as.data.frame(umap.ad$layout)
+row.names(umap.data) <- row.names(mat_exp_alz_genes)
+umap.data.covs <- merge(umap.data, covs, by = "row.names")
+umap.data.covs$Row.names <- NULL
+row.names(umap.data.covs) <- umap.data.covs$mrna_id
+```
+
+#### Seleccionamos outliers
+
+```{r}
+rownames(umap.data) <- rownames(mat_exp_alz_genes)
+
+# Calcular la media y la desviación estándar para cada componente de t-SNE
+mean.umap1 <- mean(umap.data[,1])
+sd.umap1 <- sd(umap.data[,1])
+mean.umap2 <- mean(umap.data[,2])
+sd.umap2 <- sd(umap.data[,2])
+
+# Identificar muestras a más de 2 desviaciones estándar de la media
+outliers.umap1 <- umap.data[abs(umap.data[,1] - mean.umap1) > 2 * sd.umap1, ]
+outliers.umap2 <-umap.data[abs(umap.data[,2] - mean.umap2) > 2 * sd.umap2, ]
+```
+
+```{r, echo=F}
+plot1 <- ggplot(umap.data, aes(x = V1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.umap1 + 2*sd.umap1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap1 - 2*sd.umap1, linetype = "dashed", color = "blue") +
+  labs(title = "UMAP1 density with 2*SD UMAP") +
+  geom_text(data = outliers.umap1, 
+            aes(x = outliers.umap1[,1], y= 0, label = rownames(outliers.umap1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V1, y = 0), color= ifelse(abs(umap.ad$layout[,1]) > 2*sd.umap1, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+plot2 <- ggplot(umap.data, aes(x = V2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.umap2 + 2*sd.umap2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap2 - 2*sd.umap2, linetype = "dashed", color = "blue") +
+  labs(title = "UMAP2 density with 2*SD UMAP") +
+  geom_text(data = outliers.umap2, 
+            aes(x = outliers.umap2[,2], y= 0, label = rownames(outliers.umap2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V2, y = 0), color= ifelse(abs(umap.data[,2]) > 2*sd.umap2, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1, plot2, ncol = 1)
+```
+
+```{r}
+mUMAP1.pos <- rownames(outliers.umap1[outliers.umap1[,1] > 0 , , drop = F])
+
+mUMAP1.neg <- rownames(outliers.umap1[outliers.umap1[,1] < 0 , , drop = F])
+
+mUMAP2.pos <- rownames(outliers.umap2[outliers.umap2[,1] > 0 , , drop = F])
+
+mUMAP2.neg <- rownames(outliers.umap2[outliers.umap2[,1] < 0 , , drop = F])
+```
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(mUMAP1.pos),
+                  length(mUMAP1.neg),
+                  length(mUMAP2.pos), 
+                  length(mUMAP2.neg))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_mtSNE1.pos <- c(mUMAP1.pos, rep("", max_length - length(mUMAP1.pos)))
+rownames_mtSNE1.neg <- c(mUMAP1.neg, rep("", max_length - length(mUMAP1.neg)))
+rownames_mtSNE2.pos <- c(mUMAP2.pos, rep("", max_length - length(mUMAP2.pos)))
+rownames_mtSNE2.neg <- c(mUMAP2.neg, rep("", max_length - length(mUMAP2.neg)))
+
+
+final_table <- data.frame(
+  mUMAP1.pos = rownames_mtSNE1.pos,
+  mUMAP1.neg = rownames_mtSNE1.neg,
+  mUMAP2.pos = rownames_mtSNE2.pos,
+  mUMAP2.neg = rownames_mtSNE2.neg
+)
+
+final_table
+```
+
+
+## Mecanismo de anotación basado en diferencias 
+
+### Covariables en outliers 
+
+```{r}
+# PCA
+
+for (i in rownames(covs2)){
+  if (i %in% mPC1.pos){
+    covs2[i, "sampleset_PCA"] <- "mPC1 positive"
+  }
+  else if (i %in% mPC1.neg){
+    covs2[i, "sampleset_PCA"] <- "mPC1 negative"
+  }
+  else if (i %in% mPC2.pos ){
+    covs2[i, "sampleset_PCA"] <- "mPC2 positive"
+  }
+  else if (i %in% mPC2.neg){
+    covs2[i, "sampleset_PCA"] <- "mPC2 negative"
+  }
+  else {
+    covs2[i, "sampleset_PCA"] <- "Not in both"
+  }
+}
+
+covs2$sampleset_PCA <- as.factor(covs2$sampleset_PCA)
+data.frame(table(covs2$sampleset_PCA))
+```
+
+```{r}
+#tsne
+
+for (i in rownames(covs2)){
+  if (i %in% mtSNE1.pos){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE1 positive"
+  }
+  else if (i %in% mtSNE1.neg){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE1 negative"
+  }
+  else if (i %in% mtSNE2.pos){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE2 positive"
+  }
+  else if (i %in% mtSNE2.neg){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE2 negative"
+  } else {
+    covs2[i, "sampleset_tSNE"] <- "Not in both"
+  }
+}
+
+covs2$sampleset_tSNE <- as.factor(covs2$sampleset_tSNE)
+data.frame(table(covs2$sampleset_tSNE))
+```
+
+```{r}
+# UMAP
+
+for (i in rownames(covs2)){
+  if (i %in% mUMAP1.pos){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP1 positive"
+  }
+  else if (i %in% mUMAP1.neg){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP1 negative"
+  }
+  else if (i %in% mUMAP2.pos){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP2 positive"
+  }
+  else if (i %in% mUMAP2.neg){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP2 negative"
+  } else {
+    covs2[i, "sampleset_UMAP"] <- "Not in both"
+  }
+}
+
+covs2$sampleset_UMAP <- as.factor(covs2$sampleset_UMAP)
+data.frame(table(covs2$sampleset_UMAP))
+```
+
+## Mecanismo de anotación basado en diferencias 
+
+Voy a comparar en una tabla los ratios de las covariables de los outliers comparando con los ratios de covariables de los no outliers
+
+```{r}
+calculo.ratios <- function(covs2){
+  ratios <- data.frame()
+  ratios$ratios <- numeric(0)
+  
+  for (i in names(covs2)) {
+    if (class(covs2[[i]]) == "factor") {
+      
+      if (grepl("sampleset_", i) | grepl("batch", i)){
+        next
+        
+      } else {
+        frecuencia <- table(covs2[[i]])
+  
+        if (length(frecuencia) == 2) {
+          ratio <- frecuencia[2] / frecuencia[1]
+          nuevafila <- data.frame(ratios = ratio)
+          row.names(nuevafila) <- i
+          ratios <- rbind(ratios, nuevafila)
+          
+        } 
+      } 
+    } 
+  }
+  
+  return(ratios)
+}
+
+```
+
+```{r}
+data.frame.ratios <- function(df, sampleset) {
+  niveles.sampleset <- levels(df[[sampleset]])
+
+  ratios <- data.frame(matrix(ncol = 0, nrow = length(rownames(calculo.ratios(covs2)))))
+  
+  for (i in niveles.sampleset) {
+    ratio <- df[df[[sampleset]] == i, ] %>%
+      calculo.ratios()
+    
+    nombre.filas <- rownames(ratio)
+    
+    colnames(ratio)[1] <- i
+    
+    ratios <- cbind(ratios, ratio)
+    rownames(ratios) <- nombre.filas  
+  }
+  return(ratios)
+}
+```
+
+```{r}
+ratios.PCA.kegg <- data.frame.ratios(covs2, "sampleset_PCA")
+ratios.tsne.kegg <- data.frame.ratios(covs2, "sampleset_tSNE")
+ratios.umap.kegg <- data.frame.ratios(covs2, "sampleset_UMAP")
+```
+
+```{r}
+ratio.ouliers.vs.no.ouliers <- data.frame(matrix(ncol = 0, nrow = length(ratios.PCA.kegg)))
+
+for (i in colnames(ratios.PCA.kegg)) {
+  if (i == "Not in both") {
+    next
+    
+  } else {
+    ratio <- data.frame(log2(ratios.PCA.kegg[[i]] / ratios.PCA.kegg[["Not in both"]]))
+    
+    nombre.filas <- rownames(ratios.PCA.kegg)
+    
+    colnames(ratio)[1] <- paste(i, " vs No outliers")
+    
+    ratio.ouliers.vs.no.ouliers <- cbind(ratio.ouliers.vs.no.ouliers, ratio)
+    rownames(ratio.ouliers.vs.no.ouliers) <- nombre.filas  
+  }
+}
+```
+
+```{r}
+library(reactable)
+reactable(round(ratio.ouliers.vs.no.ouliers, 2))
+reactable(data.frame(t(round(ratio.ouliers.vs.no.ouliers, 2))))
+```
+
+
+
+## Mecanismo de anotación dependiente del mecanismo de detección
+
+```{r}
+library(factoextra)
+p1 <- fviz_cos2(pca_KEGG, choice = "var", axes = 1, top= 20, fill = "#00AFBB", ggtheme = theme_minimal()) + labs(y = "Cos2", title = "Dim 1")
+p2 <- fviz_cos2(pca_KEGG, choice = "var", axes = 20, top= 20, fill = "#00AFBB", ggtheme = theme_minimal()) + labs(y = "Cos2", title = "Dim 2")
+
+grid.arrange(p1, p2, ncol=1)
+```
+
+```{r}
+pca_rotation <- round(data.frame(pca_KEGG$rotation[,1:2]),2)
+pca_rotation <- pca_rotation[order(-pca_rotation[,1]),]
+
+reactable(pca_rotation)
+```
+
+```{r}
+fviz_pca_biplot(pca_KEGG,
+                geom.ind = "none", 
+                geom_var = c("arrow", "text"), 
+                col.var = "cos2",
+                gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"),
+                repel = F, 
+                )
+```
+
+```{r}
+pca.data.kegg <- data.frame(pca_KEGG$x)[,1:2]
+colnames(pca.data.kegg) <- c("PC1.KEGG", "PC2.KEGG")
+
+covs2 <- merge(covs2, pca.data.kegg, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
+
+
+```{r}
+pca.data.kegg <- data.frame(pca_KEGG$x)[,1:2]
+colnames(pca.data.kegg) <- c("PC1.KEGG", "PC2.KEGG")
+
+covs2_df <- covs2[, c(1, 40), drop = FALSE]
+para.plot <- merge(pca.data.kegg, covs2_df, by = "row.names")
+rownames(para.plot) <- para.plot$Row.names
+para.plot$Row.names <- NULL
+
+
+ggplot(para.plot, aes_string(x = "PC1.KEGG", y = "PC2.KEGG", color = "sampleset_PCA")) +
+    geom_point(show.legend = TRUE) +
+    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outlierspc1) | mrna_id %in% rownames(outlierspc2), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 10, # Reduce el número máximo de solapamientos
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = names(covs2)[i],
+         x = "PC1.KEGG", y = "PC2.KEGG") +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm"),
+      plot.margin = margin(5, 5, 5, 5)# Agrega un margen alrededor de la gráfica si es necesario
+)
+
+```
+
+
+
+
+
+
+
+
+
