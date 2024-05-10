@@ -72,7 +72,7 @@ The Memory and Aging Project (MAP) is a longitudinal, epidemiologic clinical-pat
 
 -   [x] No utilizar test estadísticos porque las dimensiones de los no outliers impide la significancia estadística
 
--   [ ] Ordenar por mecanismos según correo Botía.
+-   [x] Ordenar por mecanismos según correo Botía.
 
     -   [x] Mecanismo de filtrado
 
@@ -86,7 +86,7 @@ The Memory and Aging Project (MAP) is a longitudinal, epidemiologic clinical-pat
 
         -   [x] Andrews
 
-    -   [ ] Mecanismo de anotación basado en diferencias
+    -   [x] Mecanismo de anotación basado en diferencias
 
         -   [x] KEGG
 
@@ -108,7 +108,25 @@ The Memory and Aging Project (MAP) is a longitudinal, epidemiologic clinical-pat
 
 -   [x] Calcular ratio de las covariables.
 
--   [ ] Limpiar código
+-   [ ] Disminuir filtro a 1.5 SD
+
+-   [ ] Hacer test estadisticos a los ratios
+
+    -   [ ] odds ratio
+
+    -   [ ] chi cuadrado
+
+    -   [ ] buscar más tipos de test estadisticos
+
+-   [ ] Visualizar los ratios positivos y \>0
+
+-   [ ] De los genes con más loadings en cada caso ver si existe la posibilidad de ver enriquecimiento diferencial
+
+    -   [ ] Ver gprofiler
+
+    -   [ ] Buscar otras herramientas
+
+-   [ ] Ver overlap entre muestras outliers de PCA y otros métodos
 
 ------------------------------------------------------------------------
 
