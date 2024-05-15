@@ -108,17 +108,21 @@ The Memory and Aging Project (MAP) is a longitudinal, epidemiologic clinical-pat
 
 -   [x] Calcular ratio de las covariables.
 
--   [ ] Disminuir filtro a 1.5 SD
+-   [x] Disminuir filtro a 1.5 SD
 
--   [ ] Hacer test estadisticos a los ratios
+-   [x] Hacer test estadisticos a los ratios
 
-    -   [ ] odds ratio
+    -   [x] fisher test
 
-    -   [ ] chi cuadrado
+    -   [x] chi cuadrado
 
     -   [ ] buscar más tipos de test estadisticos
 
--   [ ] Visualizar los ratios positivos y \>0
+-   [x] Visualizar los ratios positivos y \>0 y significativos
+
+    -   [x] Grafico de barras
+
+    -   [x] Grafico ggnarstats
 
 -   [ ] De los genes con más loadings en cada caso ver si existe la posibilidad de ver enriquecimiento diferencial
 
@@ -126,7 +130,21 @@ The Memory and Aging Project (MAP) is a longitudinal, epidemiologic clinical-pat
 
     -   [ ] Buscar otras herramientas
 
--   [ ] Ver overlap entre muestras outliers de PCA y otros métodos
+-   [x] Ver overlap entre muestras outliers de PCA y otros métodos
+
+-   [ ] Hacer upset plot
+
+    -   [ ] Con todas las muestras
+
+    -   [ ] Solamente con enfermos
+
+------------------------------------------------------------------------
+
+# Preguntas
+
+-   [ ] Cuando hago el análisis estadístico es mejor hacerlo un grupo con el resto o un grupo con los "not in both". Por ejemplo mPC1 negative con mPC1 positivo + mPC2 positivo+mPC2 negativo+not in both, o mPC1 negative con solamente Not in both
+
+-   [ ]
 
 ------------------------------------------------------------------------
 
@@ -319,3 +337,33 @@ Esto lo he escrito para centrar el TFM.
 Por un lado estamos combinando preguntas sobre el Alzheimer con preguntas sobre técnicas. Nuestra estrategia se basa en ver qué preguntas sobre el Alzheimer se contestan mejor según la técnica.
 
 Salu2
+
+## Alicia Whatsapp 2024-05-10
+
+básicamente queremos comprobar la proporción que hay de hombres por ejemplo entre casos outliers de PC1 y casos no outliers.
+
+Necesitaríamos saber si en alguna de las comparativas, hay un grupo con menos de 5 individuos
+
+[https://medium.com/\@chirag1162/chi-square-test-yates-continuity-correction-in-r-5d598a543cf8](https://medium.com/@chirag1162/chi-square-test-yates-continuity-correction-in-r-5d598a543cf8){.uri}
+
+<https://statsandr.com/blog/fisher-s-exact-test-in-r-independence-test-for-a-small-sample/>
+
+O sea, como resultado necesitaríamos una tabla donde cada fila sea una covariable que has probado (o un valor de una covariable, e.g. braaksc=1), la primera columna sería la frecuencia mínima que se ha detectado en la tabla de contingencia para esa variable, y luego otras dos columnas para el p-valor que se ha obtenido con un chi-square y el p-valor que se ha obtenido del test de Fisher, según el que aplique
+
+## Juan 2024-05-14
+
+Hola de nuevo.
+
+Solo estamos trabajando con los casos ¿verdad? Me refiero a que ya desde la selección de individuos mediante PCA solo se representan casos, ¿cierto?
+
+Otra cosa, cuando comparas los outliers, los comparas contra el resto de la población, ¿no? No contra TODA la población, sino contra la población sin outliers (ni positivos ni negativos, los que caen en medio)
+
+Los apartados 8.1 y 8.2 son muy interesantes, y muestran que de alguna forma cogemos muestras muy parecidas ¿no? Quedaría mejor un upset plot 
+
+[https://github.com/hms-dbmi/UpSetR](https://urldefense.com/v3/__https://github.com/hms-dbmi/UpSetR__;!!D9dNQwwGXtA!SSvqPvlJ9ZCYUT_g0-Gp1Nc_4qrq5JlJUmg261wm5ehsI2NBljwwUL3G1grUNFrP3ZoYMHSQOmBzbWkiXCDOA16TT00$ "https://urldefense.com/v3/__https://github.com/hms-dbmi/UpSetR__;!!D9dNQwwGXtA!SSvqPvlJ9ZCYUT_g0-Gp1Nc_4qrq5JlJUmg261wm5ehsI2NBljwwUL3G1grUNFrP3ZoYMHSQOmBzbWkiXCDOA16TT00$")
+
+para eso en lugar del plot de la 8.1. Yo añadiría también el conjunto de muestras completas, controles y casos también.
+
+Está muy bien el ploteado de los tests nominalmente significativos, con cogdx.
+
+Ten paciencia, vamos a darle una vuelta más

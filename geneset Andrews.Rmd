@@ -20,7 +20,7 @@ subtitle: Master en Bioinformática, Universidad de Murcia
 knitr::opts_chunk$set(echo = T, warning = F, message = F)
 ```
 
-```{r}
+```{r, warning=FALSE, message=FALSE}
 library(tidyverse) # Colección de paquetes para ciencia de datos (incluye ggplot2, dplyr, tidyr, readr, purrr, tibble)
 library(reshape) # Herramientas para reorganizar datos
 library(Hmisc) # resúmenes estadísticos
@@ -37,6 +37,7 @@ library(ggVennDiagram) # diagrama de Venn
 library(fastDummies)  # Para realizar el one-hot encoding
 library(reactable) # para tablas interactivas
 library(factoextra)
+library(ggstatsplot) # para barras de porcentajes de las tablas de contingencia
 ```
 
 # Leyendo datos
@@ -80,29 +81,29 @@ for (colname in names(covs)) {
   }
 }
 rownames(covs2) <- covs2$mrna_id
-covs2
 ```
-# Geneset de alzheimer Andrews
 
-## Mecanismos de filtrado
-
-Filtrar la matriz Mnxm a Mnxm’, con m’ << n para filtrar los predictores, en este caso de la matriz de expresión mat_exp. 
+# Cargando geneset
 
 ```{r}
 geneset.AD.Andrews <- read_delim("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/geneset AD Andrews 2023 Lancet.csv", delim = ";", escape_double = FALSE, trim_ws = TRUE)
 
-geneset.AD.Andrews <- unique(geneset.AD.Andrews$Gene)
+geneset <- unique(geneset.AD.Andrews$Gene)
 ```
+
+
+# Mecanismos de filtrado
+
+Filtrar la matriz Mnxm a Mnxm’, con m’ << n para filtrar los predictores, en este caso de la matriz de expresión mat_exp. 
+
 
 ```{r}
-mat.expre.AD.Andrews <- data.frame(mat_exp[, colnames(mat_exp) %in% geneset.AD.Andrews])
+mat_exp_genes <- mat_exp[, colnames(mat_exp) %in% geneset]
 ```
-
-Visualizamos si se han seleccionado todos los genes y cuantos del geneset de KEGG. Nuestra matriz tiene 305 genes de un total 384 del geneset.
 
 ```{r}
 venn.plot <- venn.diagram(
-  x = list(GenesMatriz = colnames(mat_exp), GenesetAlzheimer = geneset.AD.Andrews),
+  x = list(GenesMatriz = colnames(mat_exp), GenesetAlzheimer = geneset),
   category.names = c("Matrix Genes", "Geneset Alzheimer"),
   filename = NULL,
   output = FALSE,  # Asegura que no se exporte a un archivo
@@ -129,29 +130,29 @@ grid.newpage()  # Asegura que el lienzo esté limpio
 grid.draw(venn.plot)
 ```
 
-## Mecanismo de detección de outliers 
+# Mecanismo de detección de outliers 
 
-### PCA
+## PCA
 
 ```{r}
-pca.AD.Andrews <- prcomp(mat.expre.AD.Andrews)
+pca_geneset <- prcomp(mat_exp_genes)
 ```
 
-```{r, echo=FALSE}
-var_exp <- pca.AD.Andrews$sdev^2
+```{r}
+# Scree plot con los datos escalados
+var_exp <- pca_geneset$sdev^2
 prop_var_exp <- var_exp / sum(var_exp)
 cum_var_exp <- cumsum(prop_var_exp)
 
 df_var_exp <- data.frame(Comp = 1:length(prop_var_exp), VarExp = prop_var_exp)
 df_cum_var_exp <- data.frame(Comp = 1:length(cum_var_exp), CumVarExp = cum_var_exp)
 
-# Scree plot con los datos no escalados
 ggplot(df_var_exp[1:20,], aes(x = Comp, y = VarExp)) +
   geom_bar(stat = "identity", fill = "skyblue") +
   geom_line(aes(group = 1), color = "blue") +
   geom_point(color = "blue") +
   theme_minimal() +
-  labs(x = "Principal components", y = "Variance", title = "Scree Plot") +
+  labs(x = "Principal components", y = "Variance", title = "Scree Plot scaled") +
   ylim(c(0,1)) +
   geom_line(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
   geom_point(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), color = "red") +
@@ -160,64 +161,64 @@ ggplot(df_var_exp[1:20,], aes(x = Comp, y = VarExp)) +
   geom_text(data = df_cum_var_exp[seq(0,20,2),], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
-#### Seleccionar muestras extremas para las dos primeras PC
+### Seleccionar muestras extremas para las dos primeras PC
 
 Selecciono los outliers de las dos primeras PC con el doble de SD.
 
 ```{r}
-outlierspc1.Andrews <- as.data.frame(pca.AD.Andrews$x[abs(pca.AD.Andrews$x[,1]) > 2*(pca.AD.Andrews$sdev[1]),1])
+outlierspc1 <- as.data.frame(pca_geneset$x[abs(pca_geneset$x[,1]) > 1.5*(pca_geneset$sdev[1]),1])
 
-outlierspc2.Andrews <- as.data.frame(pca.AD.Andrews$x[abs(pca.AD.Andrews$x[,2]) > 2*(pca.AD.Andrews$sdev[2]),2])
+outlierspc2 <- as.data.frame(pca_geneset$x[abs(pca_geneset$x[,2]) > 1.5*(pca_geneset$sdev[2]),2])
 ```
 
-```{r}
-df <- as.data.frame(pca.AD.Andrews$x)
+```{r, fig.height=8, fig.width=12}
+df <- as.data.frame(pca_geneset$x)
 
 plot1 <- ggplot(df, aes(x = PC1)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
-  geom_vline(xintercept = mean(df$PC1) + 2*pca.AD.Andrews$sdev[1], linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = mean(df$PC1) - 2*pca.AD.Andrews$sdev[1], linetype = "dashed", color = "blue") +
-  labs(title = "PC1 density with 2*SD not scaled PCA") +
-  geom_text(data = outlierspc1.Andrews, 
-            aes(x = outlierspc1.Andrews[,1], y= 0, label = rownames(outlierspc1.Andrews)), 
+  geom_vline(xintercept = mean(df$PC1) + 1.5*pca_geneset$sdev[1], linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(df$PC1) - 1.5*pca_geneset$sdev[1], linetype = "dashed", color = "blue") +
+  labs(title = "PC1 density with 2*SD scaled PCA") +
+  geom_text(data = outlierspc1, 
+            aes(x = outlierspc1[,1], y= 0, label = rownames(outlierspc1)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
-  geom_rug(data = as.data.frame(pca.AD.Andrews$x), aes(x= PC1, y = 0), color= ifelse(abs(pca.AD.Andrews$x[,1]) > 2*(pca.AD.Andrews$sdev[1]), "#8B1A1A", "grey")) +
+  geom_rug(data = as.data.frame(pca_geneset$x), aes(x= PC1, y = 0), color= ifelse(abs(pca_geneset$x[,1]) > 1.5*(pca_geneset$sdev[1]), "#8B1A1A", "grey")) +
   theme_minimal()
 
 plot2 <- ggplot(df, aes(x = PC2)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
-  geom_vline(xintercept = mean(df$PC2) + 2*pca.AD.Andrews$sdev[2], linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = mean(df$PC2) - 2*pca.AD.Andrews$sdev[2], linetype = "dashed", color = "blue") +
-  labs(title = "PC2 density with 2*SD not scaled PCA") +
-  geom_text(data = outlierspc2.Andrews, 
-            aes(x = outlierspc2.Andrews[,1], y= 0, label = rownames(outlierspc2.Andrews)), 
+  geom_vline(xintercept = mean(df$PC2) + 1.5*pca_geneset$sdev[2], linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(df$PC2) - 1.5*pca_geneset$sdev[2], linetype = "dashed", color = "blue") +
+  labs(title = "PC2 density with 2*SD scaled PCA") +
+  geom_text(data = outlierspc2, 
+            aes(x = outlierspc2[,1], y= 0, label = rownames(outlierspc2)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
-  geom_rug(data = as.data.frame(pca.AD.Andrews$x), aes(x= PC2, y = 0), color= ifelse(abs(pca.AD.Andrews$x[,2]) > 2*(pca.AD.Andrews$sdev[2]), "#8B1A1A", "grey")) +
+  geom_rug(data = as.data.frame(pca_geneset$x), aes(x= PC2, y = 0), color= ifelse(abs(pca_geneset$x[,2]) > 1.5*(pca_geneset$sdev[2]), "#8B1A1A", "grey")) +
   theme_minimal()
 
 grid.arrange(plot1, plot2, ncol = 1)
 ```
 
 ```{r}
-mPC1.Andrews.pos <- rownames(outlierspc1.Andrews[outlierspc1.Andrews[, 1] > 0 , , drop = F])
-mPC1.Andrews.neg <- rownames(outlierspc1.Andrews[outlierspc1.Andrews[, 1] < 0 , , drop = F ])
+mPC1.pos <- rownames(outlierspc1[outlierspc1[, 1] > 0 , , drop = F])
+mPC1.neg <- rownames(outlierspc1[outlierspc1[, 1] < 0 , , drop = F ])
 
-mPC2.Andrews.pos <- rownames(outlierspc2.Andrews[outlierspc2.Andrews[, 1] > 0 , , drop = F ])
-mPC2.Andrews.neg <- rownames(outlierspc2.Andrews[outlierspc2.Andrews[, 1] < 0 , , drop = F])
+mPC2.pos <- rownames(outlierspc2[outlierspc2[, 1] > 0 , , drop = F ])
+mPC2.neg <- rownames(outlierspc2[outlierspc2[, 1] < 0 , , drop = F])
 ```
 
 ```{r}
 # Asegurarse de que todos son vectores del mismo largo para el dataframe final
-max_length <- max(length(mPC1.Andrews.pos),
-                  length(mPC1.Andrews.neg),
-                  length(mPC2.Andrews.pos), 
-                  length(mPC2.Andrews.neg))
+max_length <- max(length(mPC1.pos),
+                  length(mPC1.neg),
+                  length(mPC2.pos), 
+                  length(mPC2.neg))
 
 # Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
-rownames_mPC1.pos <- c(mPC1.Andrews.pos, rep("", max_length - length(mPC1.Andrews.pos)))
-rownames_mPC1.neg <- c(mPC1.Andrews.neg, rep("", max_length - length(mPC1.Andrews.neg)))
-rownames_mPC2.pos <- c(mPC2.Andrews.pos, rep("", max_length - length(mPC2.Andrews.pos)))
-rownames_mPC2.neg <- c(mPC2.Andrews.neg, rep("", max_length - length(mPC2.Andrews.neg)))
+rownames_mPC1.pos <- c(mPC1.pos, rep("", max_length - length(mPC1.pos)))
+rownames_mPC1.neg <- c(mPC1.neg, rep("", max_length - length(mPC1.neg)))
+rownames_mPC2.pos <- c(mPC2.pos, rep("", max_length - length(mPC2.pos)))
+rownames_mPC2.neg <- c(mPC2.neg, rep("", max_length - length(mPC2.neg)))
 
 
 final_table <- data.frame(
@@ -231,83 +232,83 @@ final_table
 
 ```
 
-### tSNE
+## tSNE
 
 ```{r}
 set.seed(1234)
-tsne.Andrews <- Rtsne(mat.expre.AD.Andrews, dims = 2, theta = 0.0)
+tsne <- Rtsne(mat_exp_genes, dims = 2, theta = 0.0)
 
-tsne.data.Andrews <- as.data.frame(tsne.Andrews$Y)
-row.names(tsne.data.Andrews) <- row.names(mat.expre.AD.Andrews)
-tsne.data.Andrews.covs <- merge(tsne.data.Andrews, covs, by = "row.names")
-tsne.data.Andrews.covs$Row.names <- NULL
-row.names(tsne.data.Andrews.covs) <- tsne.data.Andrews.covs$mrna_id
+tsne.data <- as.data.frame(tsne$Y)
+row.names(tsne.data) <- row.names(mat_exp_genes)
+tsne.data.covs <- merge(tsne.data, covs, by = "row.names")
+tsne.data.covs$Row.names <- NULL
+row.names(tsne.data.covs) <- tsne.data.covs$mrna_id
 ```
 
 #### Seleccionamos outliers
 
 ```{r}
-rownames(tsne.data.Andrews) <- rownames(mat.expre.AD.Andrews)
+rownames(tsne.data) <- rownames(mat_exp_genes)
 
 # Calcular la media y la desviación estándar para cada componente de t-SNE
-mean.tsne1 <- mean(tsne.data.Andrews[,1])
-sd.tsne1 <- sd(tsne.data.Andrews[,1])
-mean.tsne2 <- mean(tsne.data.Andrews[,2])
-sd.tsne2 <- sd(tsne.data.Andrews[,2])
+mean.tsne1 <- mean(tsne.data[,1])
+sd.tsne1 <- sd(tsne.data[,1])
+mean.tsne2 <- mean(tsne.data[,2])
+sd.tsne2 <- sd(tsne.data[,2])
 
 # Identificar muestras a más de 2 desviaciones estándar de la media
-outliers.tsne1.Andrews <- tsne.data.Andrews[abs(tsne.data.Andrews[,1] - mean.tsne1) > 2 * sd.tsne1, ]
-outliers.tsne2.Andrews <-tsne.data.Andrews[abs(tsne.data.Andrews[,2] - mean.tsne2) > 2 * sd.tsne2, ]
+outliers.tsne1 <- tsne.data[abs(tsne.data[,1] - mean.tsne1) > 1.5 * sd.tsne1, ]
+outliers.tsne2 <-tsne.data[abs(tsne.data[,2] - mean.tsne2) > 1.5 * sd.tsne2, ]
 ```
 
 ```{r, echo=F}
-plot1 <- ggplot(tsne.data.Andrews, aes(x = V1)) +
+plot1 <- ggplot(tsne.data, aes(x = V1)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
-  geom_vline(xintercept = mean.tsne1 + 2*sd.tsne1, linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = mean.tsne1 - 2*sd.tsne1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.tsne1 + 1.5*sd.tsne1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.tsne1 - 1.5*sd.tsne1, linetype = "dashed", color = "blue") +
   labs(title = "tSNE1 density with 2*SD tSNE") +
-  geom_text(data = outliers.tsne1.Andrews, 
-            aes(x = outliers.tsne1.Andrews[,1], y= 0, label = rownames(outliers.tsne1.Andrews)), 
+  geom_text(data = outliers.tsne1, 
+            aes(x = outliers.tsne1[,1], y= 0, label = rownames(outliers.tsne1)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
-  geom_rug(data = tsne.data.Andrews, aes(x= V1, y = 0), color= ifelse(abs(tsne.data.Andrews[,1]) > 2*sd.tsne1, "#8B1A1A", "grey")) +
+  geom_rug(data = as.data.frame(tsne$Y), aes(x= V1, y = 0), color= ifelse(abs(tsne$Y[,1]) > 1.5*sd.tsne1, "#8B1A1A", "grey")) +
   theme_minimal()
 
-plot2 <- ggplot(tsne.data.Andrews, aes(x = V2)) +
+plot2 <- ggplot(tsne.data, aes(x = V2)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
-  geom_vline(xintercept = mean.tsne2 + 2*sd.tsne2, linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = mean.tsne2 - 2*sd.tsne2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.tsne2 + 1.5*sd.tsne2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.tsne2 - 1.5*sd.tsne2, linetype = "dashed", color = "blue") +
   labs(title = "tSNE2 density with 2*SD tSNE") +
-  geom_text(data = outliers.tsne2.Andrews, 
-            aes(x = outliers.tsne2.Andrews[,2], y= 0, label = rownames(outliers.tsne2.Andrews)), 
+  geom_text(data = outliers.tsne2, 
+            aes(x = outliers.tsne2[,2], y= 0, label = rownames(outliers.tsne2)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
-  geom_rug(data = tsne.data.Andrews, aes(x= V2, y = 0), color= ifelse(abs(tsne.data.Andrews[,2]) > 2*sd.tsne2, "#8B1A1A", "grey")) +
+  geom_rug(data = as.data.frame(tsne$Y), aes(x= V2, y = 0), color= ifelse(abs(tsne.data[,2]) > 1.5*sd.tsne2, "#8B1A1A", "grey")) +
   theme_minimal()
 
 grid.arrange(plot1, plot2, ncol = 1)
 ```
 
 ```{r}
-mtSNE1.Andrews.pos <- rownames(outliers.tsne1.Andrews[outliers.tsne1.Andrews[, 1] > 0, , drop = F])
+mtSNE1.pos <- rownames(outliers.tsne1[outliers.tsne1[, 1] > 0, , drop = F])
 
-mtSNE1.Andrews.neg <- rownames(outliers.tsne1.Andrews[outliers.tsne1.Andrews[, 1] < 0, , drop = F])
+mtSNE1.neg <- rownames(outliers.tsne1[outliers.tsne1[, 1] < 0, , drop = F])
 
-mtSNE2.Andrews.pos <- rownames(outliers.tsne2.Andrews[outliers.tsne2.Andrews[, 1] > 0, , drop = F])
+mtSNE2.pos <- rownames(outliers.tsne2[outliers.tsne2[, 1] > 0, , drop = F])
 
-mtSNE2.Andrews.neg <- rownames(outliers.tsne2.Andrews[outliers.tsne2.Andrews[, 1] < 0, , drop = F])
+mtSNE2.neg <- rownames(outliers.tsne2[outliers.tsne2[, 1] < 0, , drop = F])
 ```
 
 ```{r}
 # Asegurarse de que todos son vectores del mismo largo para el dataframe final
-max_length <- max(length(mtSNE1.Andrews.pos),
-                  length(mtSNE1.Andrews.neg),
-                  length(mtSNE2.Andrews.pos), 
-                  length(mtSNE2.Andrews.neg))
+max_length <- max(length(mtSNE1.pos),
+                  length(mtSNE1.neg),
+                  length(mtSNE2.pos), 
+                  length(mtSNE2.neg))
 
 # Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
-rownames_mtSNE1.pos <- c(mtSNE1.Andrews.pos, rep("", max_length - length(mtSNE1.Andrews.pos)))
-rownames_mtSNE1.neg <- c(mtSNE1.Andrews.neg, rep("", max_length - length(mtSNE1.Andrews.neg)))
-rownames_mtSNE2.pos <- c(mtSNE2.Andrews.pos, rep("", max_length - length(mtSNE2.Andrews.pos)))
-rownames_mtSNE2.neg <- c(mtSNE2.Andrews.neg, rep("", max_length - length(mtSNE2.Andrews.neg)))
+rownames_mtSNE1.pos <- c(mtSNE1.pos, rep("", max_length - length(mtSNE1.pos)))
+rownames_mtSNE1.neg <- c(mtSNE1.neg, rep("", max_length - length(mtSNE1.neg)))
+rownames_mtSNE2.pos <- c(mtSNE2.pos, rep("", max_length - length(mtSNE2.pos)))
+rownames_mtSNE2.neg <- c(mtSNE2.neg, rep("", max_length - length(mtSNE2.neg)))
 
 
 final_table <- data.frame(
@@ -320,7 +321,7 @@ final_table <- data.frame(
 final_table
 ```
 
-### UMAP
+## UMAP
 
 ```{r}
 local.config <- umap.defaults
@@ -329,79 +330,79 @@ local.config <- umap.defaults
 # local.config$n_epochs <- 100
 # local.config$metric<- "euclidean"
 set.seed(1234)
-umap.Andrews <- umap(mat.expre.AD.Andrews,random_stage=1234, local.config)
+umap.ad <- umap(mat_exp_genes,random_stage=1234, local.config)
 
-umap.data.Andrews <- as.data.frame(umap.Andrews$layout)
-row.names(umap.data.Andrews) <- row.names(mat.expre.AD.Andrews)
-umap.data.Andrews.covs <- merge(umap.data.Andrews, covs, by = "row.names")
-umap.data.Andrews.covs$Row.names <- NULL
-row.names(umap.data.Andrews.covs) <- umap.data.Andrews.covs$mrna_id
+umap.data <- as.data.frame(umap.ad$layout)
+row.names(umap.data) <- row.names(mat_exp_genes)
+umap.data.covs <- merge(umap.data, covs, by = "row.names")
+umap.data.covs$Row.names <- NULL
+row.names(umap.data.covs) <- umap.data.covs$mrna_id
 ```
 
 #### Seleccionamos outliers
 
 ```{r}
-rownames(umap.data.Andrews) <- rownames(mat.expre.AD.Andrews)
+rownames(umap.data) <- rownames(mat_exp_genes)
 
 # Calcular la media y la desviación estándar para cada componente de t-SNE
-mean.umap1 <- mean(umap.data.Andrews[,1])
-sd.umap1 <- sd(umap.data.Andrews[,1])
-mean.umap2 <- mean(umap.data.Andrews[,2])
-sd.umap2 <- sd(umap.data.Andrews[,2])
+mean.umap1 <- mean(umap.data[,1])
+sd.umap1 <- sd(umap.data[,1])
+mean.umap2 <- mean(umap.data[,2])
+sd.umap2 <- sd(umap.data[,2])
 
 # Identificar muestras a más de 2 desviaciones estándar de la media
-outliers.umap1.Andrews <- umap.data.Andrews[abs(umap.data.Andrews[,1] - mean.umap1) > 2 * sd.umap1, ]
-outliers.umap2.Andrews <-umap.data.Andrews[abs(umap.data.Andrews[,2] - mean.umap2) > 2 * sd.umap2, ]
+outliers.umap1 <- umap.data[abs(umap.data[,1] - mean.umap1) > 1.5 * sd.umap1, ]
+outliers.umap2 <-umap.data[abs(umap.data[,2] - mean.umap2) > 1.5 * sd.umap2, ]
 ```
 
 ```{r, echo=F}
-plot1 <- ggplot(umap.data.Andrews, aes(x = V1)) +
+plot1 <- ggplot(umap.data, aes(x = V1)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
-  geom_vline(xintercept = mean.umap1 + 2*sd.umap1, linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = mean.umap1 - 2*sd.umap1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap1 + 1.5*sd.umap1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap1 - 1.5*sd.umap1, linetype = "dashed", color = "blue") +
   labs(title = "UMAP1 density with 2*SD UMAP") +
-  geom_text(data = outliers.umap1.Andrews, 
-            aes(x = outliers.umap1.Andrews[,1], y= 0, label = rownames(outliers.umap1.Andrews)), 
+  geom_text(data = outliers.umap1, 
+            aes(x = outliers.umap1[,1], y= 0, label = rownames(outliers.umap1)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
-  geom_rug(data = umap.data.Andrews, aes(x= V1, y = 0), color= ifelse(abs(umap.data.Andrews[,1]) > 2*sd.umap1, "#8B1A1A", "grey")) +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V1, y = 0), color= ifelse(abs(umap.ad$layout[,1]) > 1.5*sd.umap1, "#8B1A1A", "grey")) +
   theme_minimal()
 
-plot2 <- ggplot(umap.data.Andrews, aes(x = V2)) +
+plot2 <- ggplot(umap.data, aes(x = V2)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
-  geom_vline(xintercept = mean.umap2 + 2*sd.umap2, linetype = "dashed", color = "blue") +
-  geom_vline(xintercept = mean.umap2 - 2*sd.umap2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap2 + 1.5*sd.umap2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap2 - 1.5*sd.umap2, linetype = "dashed", color = "blue") +
   labs(title = "UMAP2 density with 2*SD UMAP") +
-  geom_text(data = outliers.umap2.Andrews, 
-            aes(x = outliers.umap2.Andrews[,2], y= 0, label = rownames(outliers.umap2.Andrews)), 
+  geom_text(data = outliers.umap2, 
+            aes(x = outliers.umap2[,2], y= 0, label = rownames(outliers.umap2)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
-  geom_rug(data = umap.data.Andrews, aes(x= V2, y = 0), color= ifelse(abs(umap.data.Andrews[,2]) > 2*sd.umap2, "#8B1A1A", "grey")) +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V2, y = 0), color= ifelse(abs(umap.data[,2]) > 1.5*sd.umap2, "#8B1A1A", "grey")) +
   theme_minimal()
 
 grid.arrange(plot1, plot2, ncol = 1)
 ```
 
 ```{r}
-mUMAP1.Andrews.pos <- rownames(outliers.umap1.Andrews[outliers.umap1.Andrews[,1] > 0 , , drop = F])
+mUMAP1.pos <- rownames(outliers.umap1[outliers.umap1[,1] > 0 , , drop = F])
 
-mUMAP1.Andrews.neg <- rownames(outliers.umap1.Andrews[outliers.umap1.Andrews[,1] < 0 , , drop = F])
+mUMAP1.neg <- rownames(outliers.umap1[outliers.umap1[,1] < 0 , , drop = F])
 
-mUMAP2.Andrews.pos <- rownames(outliers.umap2.Andrews[outliers.umap2.Andrews[,1] > 0 , , drop = F])
+mUMAP2.pos <- rownames(outliers.umap2[outliers.umap2[,1] > 0 , , drop = F])
 
-mUMAP2.Andrews.neg <- rownames(outliers.umap2.Andrews[outliers.umap2.Andrews[,1] < 0 , , drop = F])
+mUMAP2.neg <- rownames(outliers.umap2[outliers.umap2[,1] < 0 , , drop = F])
 ```
 
 ```{r}
 # Asegurarse de que todos son vectores del mismo largo para el dataframe final
-max_length <- max(length(mUMAP1.Andrews.pos),
-                  length(mUMAP1.Andrews.neg),
-                  length(mUMAP2.Andrews.pos), 
-                  length(mUMAP2.Andrews.neg))
+max_length <- max(length(mUMAP1.pos),
+                  length(mUMAP1.neg),
+                  length(mUMAP2.pos), 
+                  length(mUMAP2.neg))
 
 # Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
-rownames_mtSNE1.pos <- c(mUMAP1.Andrews.pos, rep("", max_length - length(mUMAP1.Andrews.pos)))
-rownames_mtSNE1.neg <- c(mUMAP1.Andrews.neg, rep("", max_length - length(mUMAP1.Andrews.neg)))
-rownames_mtSNE2.pos <- c(mUMAP2.Andrews.pos, rep("", max_length - length(mUMAP2.Andrews.pos)))
-rownames_mtSNE2.neg <- c(mUMAP2.Andrews.neg, rep("", max_length - length(mUMAP2.Andrews.neg)))
+rownames_mtSNE1.pos <- c(mUMAP1.pos, rep("", max_length - length(mUMAP1.pos)))
+rownames_mtSNE1.neg <- c(mUMAP1.neg, rep("", max_length - length(mUMAP1.neg)))
+rownames_mtSNE2.pos <- c(mUMAP2.pos, rep("", max_length - length(mUMAP2.pos)))
+rownames_mtSNE2.neg <- c(mUMAP2.neg, rep("", max_length - length(mUMAP2.neg)))
 
 
 final_table <- data.frame(
@@ -415,94 +416,95 @@ final_table
 ```
 
 
-## Mecanismo de anotación basado en diferencias 
+# Mecanismo de anotación basado en diferencias 
 
-### Covariables en outliers 
+## Covariables en outliers 
 
 ```{r}
 # PCA
 
 for (i in rownames(covs2)){
-  if (i %in% mPC1.Andrews.pos){
-    covs2[i, "sampleset_PCA_Andrews"] <- "mPC1 positive"
+  if (i %in% mPC1.pos){
+    covs2[i, "sampleset_PCA"] <- "mPC1 positive"
   }
-  else if (i %in% mPC1.Andrews.neg){
-    covs2[i, "sampleset_PCA_Andrews"] <- "mPC1 negative"
+  else if (i %in% mPC1.neg){
+    covs2[i, "sampleset_PCA"] <- "mPC1 negative"
   }
-  else if (i %in% mPC2.Andrews.pos ){
-    covs2[i, "sampleset_PCA_Andrews"] <- "mPC2 positive"
+  else if (i %in% mPC2.pos ){
+    covs2[i, "sampleset_PCA"] <- "mPC2 positive"
   }
-  else if (i %in% mPC2.Andrews.neg){
-    covs2[i, "sampleset_PCA_Andrews"] <- "mPC2 negative"
+  else if (i %in% mPC2.neg){
+    covs2[i, "sampleset_PCA"] <- "mPC2 negative"
   }
   else {
-    covs2[i, "sampleset_PCA_Andrews"] <- "Not in both"
+    covs2[i, "sampleset_PCA"] <- "Not in both"
   }
 }
 
-covs2$sampleset_PCA_Andrews <- as.factor(covs2$sampleset_PCA_Andrews)
-data.frame(table(covs2$sampleset_PCA_Andrews))
-data.frame(table(covs2$sampleset_PCA_Andrews[covs2$neuroStatus == 1]))
+covs2$sampleset_PCA <- as.factor(covs2$sampleset_PCA)
+data.frame(table(covs2$sampleset_PCA))
+data.frame(table(covs2$sampleset_PCA[covs2$neuroStatus == 1]))
 ```
 
 ```{r}
 #tsne
 
 for (i in rownames(covs2)){
-  if (i %in% mtSNE1.Andrews.pos){
-    covs2[i, "sampleset_tSNE_Andrews"] <- "mtSNE1 positive"
+  if (i %in% mtSNE1.pos){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE1 positive"
   }
-  else if (i %in% mtSNE1.Andrews.neg){
-    covs2[i, "sampleset_tSNE_Andrews"] <- "mtSNE1 negative"
+  else if (i %in% mtSNE1.neg){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE1 negative"
   }
-  else if (i %in% mtSNE2.Andrews.pos){
-    covs2[i, "sampleset_tSNE_Andrews"] <- "mtSNE2 positive"
+  else if (i %in% mtSNE2.pos){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE2 positive"
   }
-  else if (i %in% mtSNE2.Andrews.neg){
-    covs2[i, "sampleset_tSNE_Andrews"] <- "mtSNE2 negative"
+  else if (i %in% mtSNE2.neg){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE2 negative"
   } else {
-    covs2[i, "sampleset_tSNE_Andrews"] <- "Not in both"
+    covs2[i, "sampleset_tSNE"] <- "Not in both"
   }
 }
 
-covs2$sampleset_tSNE_Andrews <- as.factor(covs2$sampleset_tSNE_Andrews)
-data.frame(table(covs2$sampleset_tSNE_Andrews))
-data.frame(table(covs2$sampleset_tSNE_Andrews[covs2$neuroStatus == 1]))
+covs2$sampleset_tSNE <- as.factor(covs2$sampleset_tSNE)
+data.frame(table(covs2$sampleset_tSNE))
+data.frame(table(covs2$sampleset_tSNE[covs2$neuroStatus == 1]))
 ```
 
 ```{r}
 # UMAP
 
 for (i in rownames(covs2)){
-  if (i %in% mUMAP1.Andrews.pos){
-    covs2[i, "sampleset_UMAP_Andrews"] <- "mUMAP1 positive"
+  if (i %in% mUMAP1.pos){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP1 positive"
   }
-  else if (i %in% mUMAP1.Andrews.neg){
-    covs2[i, "sampleset_UMAP_Andrews"] <- "mUMAP1 negative"
+  else if (i %in% mUMAP1.neg){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP1 negative"
   }
-  else if (i %in% mUMAP2.Andrews.pos){
-    covs2[i, "sampleset_UMAP_Andrews"] <- "mUMAP2 positive"
+  else if (i %in% mUMAP2.pos){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP2 positive"
   }
-  else if (i %in% mUMAP2.Andrews.neg){
-    covs2[i, "sampleset_UMAP_Andrews"] <- "mUMAP2 negative"
+  else if (i %in% mUMAP2.neg){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP2 negative"
   } else {
-    covs2[i, "sampleset_UMAP_Andrews"] <- "Not in both"
+    covs2[i, "sampleset_UMAP"] <- "Not in both"
   }
 }
 
-covs2$sampleset_UMAP_Andrews <- as.factor(covs2$sampleset_UMAP_Andrews)
-data.frame(table(covs2$sampleset_UMAP_Andrews))
-data.frame(table(covs2$sampleset_UMAP_Andrews[covs2$neuroStatus == 1]))
+covs2$sampleset_UMAP <- as.factor(covs2$sampleset_UMAP)
+data.frame(table(covs2$sampleset_UMAP))
+data.frame(table(covs2$sampleset_UMAP[covs2$neuroStatus == 1]))
 ```
 
-### Fitrado de casos 
+## Fitrado de casos 
 
 ```{r}
 covs2.casos <- covs2 %>%
   filter(neuroStatus == 1)
+reactable(covs2.casos)
 ```
 
-## Mecanismo de anotación basado en diferencias 
+# Mecanismo de anotación basado en diferencias 
 
 Voy a comparar en una tabla los ratios de las covariables de los outliers comparando con los ratios de covariables de los no outliers
 
@@ -559,20 +561,20 @@ data.frame.ratios <- function(df, sampleset) {
 ### PCA
 
 ```{r}
-ratios.PCA.Andrews <- data.frame.ratios(covs2.casos, "sampleset_PCA_Andrews")
+ratios.PCA.kegg <- data.frame.ratios(covs2.casos, "sampleset_PCA")
 ```
 
 ```{r}
-ratio.ouliers.vs.no.ouliers <- data.frame(matrix(ncol = 0, nrow = length(rownames(ratios.PCA.Andrews))))
+ratio.ouliers.vs.no.ouliers <- data.frame(matrix(ncol = 0, nrow = length(rownames(ratios.PCA.kegg))))
 
-for (i in colnames(ratios.PCA.Andrews)) {
+for (i in colnames(ratios.PCA.kegg)) {
   if (i == "Not in both") {
     next
     
   } else {
-    ratio <- data.frame(log2(ratios.PCA.Andrews[[i]] / ratios.PCA.Andrews[["Not in both"]]))
+    ratio <- data.frame(log2(ratios.PCA.kegg[[i]] / ratios.PCA.kegg[["Not in both"]]))
     
-    nombre.filas <- rownames(ratios.PCA.Andrews)
+    nombre.filas <- rownames(ratios.PCA.kegg)
     
     colnames(ratio)[1] <- paste(i, " vs No outliers")
     
@@ -591,62 +593,173 @@ ratio.ouliers.vs.no.ouliers <- replace(ratio.ouliers.vs.no.ouliers, is.na(ratio.
 reactable(ratio.ouliers.vs.no.ouliers)
 reactable(data.frame(t(ratio.ouliers.vs.no.ouliers)))
 ```
+
+#### Test estadistico
+
+```{r}
+calculo.test <- function(df.covs, sampleset){
+  
+  resultados <- data.frame(
+    "Covariable" = character(0), 
+    "Principal component" = character(0),
+    "Minimun expected frequency" = character(0),
+    "test" = character(0),
+    "p-value" = numeric(0),
+    "test 2" = character(0),
+    "p-value 2" = numeric(0),
+    "mPC_0" = numeric(0),
+    "mPC_1" = numeric(0),
+    "NOT mPC_0" = numeric(0),
+    "NOT mPC_1" = numeric(0),
+    stringsAsFactors = FALSE
+  )
+  
+  for (i in names(df.covs)) {
+    
+    if (i == "neuroStatus") {
+      next
+    }
+    if (class(df.covs[[i]]) == "factor") {
+      
+      if (grepl("sampleset_", i) | grepl("batch", i)){
+        next
+      } else {
+        
+        for (j in levels(df.covs[[sampleset]])) {
+          
+          if (j == "Not in both") {
+            next
+          } else {
+            df <- df.covs %>%
+              mutate(modified.class = ifelse(!!sym(sampleset) == j, j, paste("Not", j))) %>%
+              dplyr::select(all_of(i), modified.class) %>%
+              mutate(class = factor(modified.class, levels = c(j, paste("Not", j))))
+            
+            frecuencia <- table(df[[i]], df[["class"]])
+            
+            rownames(frecuencia) <- c(paste(i, rownames(frecuencia), sep = "_"))
+            
+            expected <- chisq.test(frecuencia)$expected
+            
+            if (any(expected <= 5)) {
+              # Obtener la posición del valor mínimo
+              posicion_minimo <- which(frecuencia == min(frecuencia), arr.ind = TRUE)
+              nombres.columnas <- colnames(frecuencia)
+              nombres.filas <- rownames(frecuencia)
+              
+              test <- fisher.test(frecuencia)
+              test.utilizado <- "Fisher's exact test"
+              
+              test2 <- chisq.test(frecuencia, correct = TRUE)
+              test2.utilizado <- "Chi-Square test with Yate's correction"
+              
+            } else {
+              test <- chisq.test(frecuencia, correct = TRUE)
+              test.utilizado <- "Chi-Square test with Yate's correction"
+              
+              test2 <- chisq.test(matrix(c(1,1,1,1), nrow = 2))
+              test2.utilizado <- "N/A"
+            }
+            
+            nuevafila <- data.frame(
+              "Covariable" = i,
+              "Principal component" = j,
+              "Minimun expected frequency" = round(min(expected), 2),
+              "test" = test.utilizado,
+              "p-value" = round(test$p.value, 3),
+              "test 2" = test2.utilizado,
+              "p-value 2" = ifelse(test2.utilizado == "N/A", NA, round(test2$p.value, 3)),
+              "mPC_0" = round(expected[1,1], 2),
+              "mPC_1" = round(expected[2,1], 2),
+              "NOT mPC_0" = round(expected[1,2], 2),
+              "NOT mPC_1" = round(expected[2,2], 2),
+              stringsAsFactors = FALSE
+            )
+            
+            resultados <- rbind(resultados, nuevafila)
+          }
+        }
+      } 
+    } 
+  } 
+  
+  return(resultados)
+}
+```
+
+```{r,warning=FALSE}
+reactable(calculo.test(df.covs = covs2.casos, sampleset = "sampleset_PCA"))
+yepa <- calculo.test(df.covs = covs2.casos, sampleset = "sampleset_PCA")
+```
+
+```{r, warning=FALSE}
+tests <- calculo.test(df.covs = covs2.casos, sampleset = "sampleset_PCA") %>%
+  filter(p.value <= 0.1) 
+```
+
+```{r}
+plot.pvalue.sig <- function(df, test.df) {
+  
+  plots <- list()
+  
+  for (i in 1:nrow(test.df)) {
+    variable <- as.character(test.df[i, 1])
+    component <- as.character(test.df[i, 2])
+    Minimun.expected.frequency <- as.character(test.df[i, 3])
+    test.used <- as.character(test.df[i, 4])
+    p.value <- as.character(test.df[i, 5])
+    
+    df.filtered <- df %>%
+      mutate(modified.class = ifelse(sampleset_PCA == component, component, paste("Not", component))) %>%
+      dplyr::select(all_of(variable), modified.class) %>%
+      mutate(class = factor(modified.class, levels = c(component, paste("Not", component))))
+    
+    p <- ggbarstats(
+      data = df.filtered, 
+      x = !!sym(variable), 
+      y = class, 
+      xlab = "", title = paste(component, variable), 
+      results.subtitle = FALSE, 
+      subtitle = paste0(test.used, " with p-value = ", p.value, ". \nMinimum expected freq: ", Minimun.expected.frequency))
+    
+    plots[[paste(variable, component)]] <- p
+  }
+  
+  return(plots)
+}
+
+plots <- plot.pvalue.sig(df = covs2.casos, test.df = tests)
+
+plot_list <- lapply(plots, ggplotGrob)
+
+grid.arrange(grobs = plot_list, ncol = 1)
+```
+
+
 
 ### tSNE
 
-Solamente hay un caso por lo que no es factible hacerlo.
-
 ```{r}
-ratios.tsne.Andrews <- data.frame.ratios(covs2.casos, "sampleset_tSNE_Andrews")
-```
-
-```{r}
-ratio.ouliers.vs.no.ouliers <- data.frame(matrix(ncol = 0, nrow = length(rownames(ratios.tsne.Andrews))))
-
-for (i in colnames(ratios.tsne.Andrews)) {
-  if (i == "Not in both") {
-    next
-    
-  } else {
-    ratio <- data.frame(log2(ratios.tsne.Andrews[[i]] / ratios.tsne.Andrews[["Not in both"]]))
-    
-    nombre.filas <- rownames(ratios.tsne.Andrews)
-    
-    colnames(ratio)[1] <- paste(i, " vs No outliers")
-    
-    ratio.ouliers.vs.no.ouliers <- cbind(ratio.ouliers.vs.no.ouliers, ratio)
-    rownames(ratio.ouliers.vs.no.ouliers) <- nombre.filas  
-  }
-}
-ratio.ouliers.vs.no.ouliers <- round(ratio.ouliers.vs.no.ouliers, 2)
-ratio.ouliers.vs.no.ouliers <- ratio.ouliers.vs.no.ouliers %>%
-  filter(row_number() != which(rownames(ratio.ouliers.vs.no.ouliers) == "neuroStatus"))
-ratio.ouliers.vs.no.ouliers <- replace(ratio.ouliers.vs.no.ouliers, is.na(ratio.ouliers.vs.no.ouliers), "sin casos")
-
-```
-
-```{r}
-reactable(ratio.ouliers.vs.no.ouliers)
-reactable(data.frame(t(ratio.ouliers.vs.no.ouliers)))
+ratios.tsne.kegg <- data.frame.ratios(covs2.casos, "sampleset_tSNE")
 ```
 
 ### UMAP
 
 ```{r}
-ratios.umap.Andrews <- data.frame.ratios(covs2.casos, "sampleset_UMAP_Andrews")
+ratios.umap.kegg <- data.frame.ratios(covs2.casos, "sampleset_UMAP")
 ```
 
 ```{r}
-ratio.ouliers.vs.no.ouliers <- data.frame(matrix(ncol = 0, nrow = length(rownames(ratios.umap.Andrews))))
+ratio.ouliers.vs.no.ouliers <- data.frame(matrix(ncol = 0, nrow = length(rownames(ratios.umap.kegg))))
 
-for (i in colnames(ratios.umap.Andrews)) {
+for (i in colnames(ratios.umap.kegg)) {
   if (i == "Not in both") {
     next
     
   } else {
-    ratio <- data.frame(log2(ratios.umap.Andrews[[i]] / ratios.umap.Andrews[["Not in both"]]))
+    ratio <- data.frame(log2(ratios.umap.kegg[[i]] / ratios.umap.kegg[["Not in both"]]))
     
-    nombre.filas <- rownames(ratios.umap.Andrews)
+    nombre.filas <- rownames(ratios.umap.kegg)
     
     colnames(ratio)[1] <- paste(i, " vs No outliers")
     
@@ -667,73 +780,71 @@ reactable(ratio.ouliers.vs.no.ouliers)
 reactable(data.frame(t(ratio.ouliers.vs.no.ouliers)))
 ```
 
-## Mecanismo de anotación dependiente del mecanismo de detección
+# Mecanismo de anotación dependiente del mecanismo de detección
 
-### PCA
+## PCA
 
 ```{r}
-pca_rotation_Andrews <- round(data.frame(pca.AD.Andrews$rotation[,1:2]),2)
+pca_rotation <- round(data.frame(pca_geneset$rotation[,1:2]),3)
 
-reactable(pca_rotation_Andrews)
+reactable(pca_rotation)
 ```
 
 ```{r}
-loadings <- pca.AD.Andrews$rotation
+loadings <- pca_geneset$rotation
 
-loading.pc1.pos.Andrews <- loadings[loadings[, "PC1"] > 0, "PC1"]
-loading.pc1.neg.Andrews <- loadings[loadings[, "PC1"] < 0, "PC1"]
-loading.pc2.pos.Andrews <- loadings[loadings[, "PC2"] > 0, "PC2"]
-loading.pc2.neg.Andrews <- loadings[loadings[, "PC2"] < 0, "PC2"]
+loading.pc1.pos <- loadings[loadings[, "PC1"] > 0, "PC1"]
+loading.pc1.neg <- loadings[loadings[, "PC1"] < 0, "PC1"]
+loading.pc2.pos <- loadings[loadings[, "PC2"] > 0, "PC2"]
+loading.pc2.neg <- loadings[loadings[, "PC2"] < 0, "PC2"]
 
-best.loadings.pc1.pos.Andrews <- data.frame(loading = head(sort(loading.pc1.pos.Andrews, decreasing = TRUE), 5))
-best.loadings.pc1.neg.Andrews <- data.frame(loading =head(sort(loading.pc1.neg.Andrews, decreasing = FALSE), 5), pc = "mPC1 negative")
-best.loadings.pc2.pos.Andrews <- data.frame(loading =head(sort(loading.pc2.pos.Andrews, decreasing = TRUE), 5), pc = "mPC2 positive")
-best.loadings.pc2.neg.Andrews <- data.frame(loading =head(sort(loading.pc2.neg.Andrews, decreasing = FALSE), 5), pc = "mPC2 negative")
+best.loadings.pc1.pos <- data.frame(loading = head(sort(loading.pc1.pos, decreasing = TRUE), 5))
+best.loadings.pc1.neg <- data.frame(loading =head(sort(loading.pc1.neg, decreasing = FALSE), 5), pc = "mPC1 negative")
+best.loadings.pc2.pos <- data.frame(loading =head(sort(loading.pc2.pos, decreasing = TRUE), 5), pc = "mPC2 positive")
+best.loadings.pc2.neg <- data.frame(loading =head(sort(loading.pc2.neg, decreasing = FALSE), 5), pc = "mPC2 negative")
 ```
 
-
 ```{r}
-pca.var <- get_pca_var(pca.AD.Andrews)
+pca.var <- get_pca_var(pca_geneset)
 pca.var.coord <- data.frame(pca.var$coord[,1:2])
 
-pca.var.coord.best.loadings <-  pca.var.coord[(rownames(pca.var.coord) %in% rownames(best.loadings.pc1.pos.Andrews)) | (rownames(pca.var.coord) %in% rownames(best.loadings.pc1.neg.Andrews)) | (rownames(pca.var.coord) %in% rownames(best.loadings.pc2.pos.Andrews)) | (rownames(pca.var.coord) %in% rownames(best.loadings.pc2.neg.Andrews)), ]
+pca.var.coord.best.loadings <-  pca.var.coord[(rownames(pca.var.coord) %in% rownames(best.loadings.pc1.pos)) | (rownames(pca.var.coord) %in% rownames(best.loadings.pc1.neg)) | (rownames(pca.var.coord) %in% rownames(best.loadings.pc2.pos)) | (rownames(pca.var.coord) %in% rownames(best.loadings.pc2.neg)), ]
 
 
 pca.var.coord.best.loadings <- pca.var.coord.best.loadings %>%
   mutate(PC = case_when(
-    row.names(.) %in% rownames(best.loadings.pc1.pos.Andrews) ~ "mPC1 positive",
-    row.names(.) %in% rownames(best.loadings.pc1.neg.Andrews) ~ "mPC1 negative",
-    row.names(.) %in% rownames(best.loadings.pc2.pos.Andrews) ~ "mPC2 positive",
-    row.names(.) %in% rownames(best.loadings.pc2.neg.Andrews) ~ "mPC2 negative",
+    row.names(.) %in% rownames(best.loadings.pc1.pos) ~ "mPC1 positive",
+    row.names(.) %in% rownames(best.loadings.pc1.neg) ~ "mPC1 negative",
+    row.names(.) %in% rownames(best.loadings.pc2.pos) ~ "mPC2 positive",
+    row.names(.) %in% rownames(best.loadings.pc2.neg) ~ "mPC2 negative",
     TRUE ~ NA_character_  # para cualquier otra condición no especificada
   ))
 ```
 
 ```{r}
-pca.data.Andrews <- data.frame(pca.AD.Andrews$x)[,1:2]
-colnames(pca.data.Andrews) <- c("PC1.Andrews", "PC2.Andrews")
+pca.data.kegg <- data.frame(pca_geneset$x)[,1:2]
+colnames(pca.data.kegg) <- c("PC1.KEGG", "PC2.KEGG")
 
-covs2 <- merge(covs2, pca.data.Andrews, by="row.names")
+covs2 <- merge(covs2, pca.data.kegg, by="row.names")
 rownames(covs2) <- covs2$mrna_id
 covs2$Row.names <- NULL
 ```
 
 ```{r, fig.width=8, fig.height=6}
-pca.data.Andrews <- data.frame(pca.AD.Andrews$x)[,1:2]
-colnames(pca.data.Andrews) <- c("PC1.Andrews", "PC2.Andrews")
+pca.data.kegg <- data.frame(pca_geneset$x)[,1:2]
+colnames(pca.data.kegg) <- c("PC1.KEGG", "PC2.KEGG")
 
 covs2_df <- covs2.casos%>%
-  dplyr::select(mrna_id, sampleset_PCA_Andrews)
-para.plot <- merge(pca.data.Andrews, covs2_df, by = "row.names")
+  dplyr::select(mrna_id, sampleset_PCA)
+para.plot <- merge(pca.data.kegg, covs2_df, by = "row.names")
 rownames(para.plot) <- para.plot$Row.names
 para.plot$Row.names <- NULL
 
 pca.var.coord.best.loadings$id <- rownames(pca.var.coord.best.loadings)
 
-p <- ggplot(para.plot, aes_string(x = "PC1.Andrews", y = "PC2.Andrews", color = "sampleset_PCA_Andrews")) +
+p <- ggplot(para.plot, aes_string(x = "PC1.KEGG", y = "PC2.KEGG", color = "sampleset_PCA")) +
     geom_point(show.legend = TRUE, size = 3) +
-    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outlierspc1) | mrna_id %in% rownames(outlierspc2),
-                                     as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outlierspc1) | mrna_id %in% rownames(outlierspc2), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
                   color = "black",
                   max.overlaps = 30, # Reduce el número máximo de solapamientos
                   point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
@@ -745,22 +856,20 @@ p <- ggplot(para.plot, aes_string(x = "PC1.Andrews", y = "PC2.Andrews", color = 
                   arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
     theme_minimal() +
     labs(title = "PCA plot loadings",
-         x = "PC1.Andrews", y = "PC2.Andrews") +
+         x = "PC1.KEGG", y = "PC2.KEGG") +
     theme(
       legend.title = element_blank(),
       legend.text = element_text(size = 12),
       text = element_text(size = 12),
       legend.key.size = unit(0.5, "cm"),
       plot.margin = margin(5, 5, 5, 5)) +
-  geom_point(data= (covs2 %>% filter(neuroStatus == 0)), aes_string(x = "PC1.Andrews", y = "PC2.Andrews", color = "sampleset_PCA_Andrews"), alpha = 0.5)+ 
-  geom_segment(data = pca.var.coord.best.loadings, 
-               aes(x= 0, y = 0, xend = Dim.1*12, yend = Dim.2*12, color = PC), 
-               arrow = arrow(length = unit(0.05, "inches"), type = "closed"),
+  geom_point(data= (covs2 %>% filter(neuroStatus == 0)), aes_string(x = "PC1.KEGG", y = "PC2.KEGG", color = "sampleset_PCA"), alpha = 0.5)+ 
+  geom_segment(data = pca.var.coord.best.loadings, aes(x= 0, y = 0, xend = Dim.1*20, yend = Dim.2*20, color = PC), arrow = arrow(length = unit(0.05, "inches"), type = "closed"),
                size = 0.4) +
   geom_text_repel(data = pca.var.coord.best.loadings,
-                    aes(x = Dim.1*15, 
-                        y = Dim.2*15,
-                        label=ifelse((id %in% rownames(best.loadings.pc1.pos.Andrews) | id %in% rownames(best.loadings.pc1.neg.Andrews) | id %in% rownames(best.loadings.pc2.pos.Andrews) | id %in% rownames(best.loadings.pc2.neg.Andrews)), id, ""),
+                    aes(x = Dim.1*22, 
+                        y = Dim.2*22,
+                        label=ifelse((id %in% rownames(best.loadings.pc1.pos) | id %in% rownames(best.loadings.pc1.neg) | id %in% rownames(best.loadings.pc2.pos) | id %in% rownames(best.loadings.pc2.neg)), id, ""),
                         color = PC),
                   max.overlaps = 10, # Reduce el número máximo de solapamientos
                   size = 3, 
@@ -771,12 +880,251 @@ p <- ggplot(para.plot, aes_string(x = "PC1.Andrews", y = "PC2.Andrews", color = 
 p
 ```
 
+# Comparaciones
+
+## Muestras entre técnicas
+
+```{r}
+outliers.PCA <- c(rownames(outlierspc1), rownames(outlierspc2))
+outliers.PCA <- outliers.PCA[outliers.PCA %in% rownames(covs2.casos)]
+
+outliers.tSNE <- c(rownames(outliers.tsne1), rownames(outliers.tsne2))
+outliers.tSNE <- outliers.tSNE[outliers.tSNE %in% rownames(covs2.casos)]
+
+outliers.UMAP <- c(rownames(outliers.umap1), rownames(outliers.umap2))
+outliers.UMAP <- outliers.UMAP[outliers.UMAP %in% rownames(covs2.casos)]
+
+all.outliers <- list(PCA.KEGG = outliers.PCA,
+                     tSNE.KEGG = outliers.tSNE,
+                     UMAP.KEGG = outliers.UMAP)
+
+max_length <- max(sapply(all.outliers, length))
+
+# Función para normalizar las longitudes de las listas
+normalize_length <- function(x, max_length) {
+  length(x) <- max_length  # Esto rellenará con NA si la lista es más corta que max_length
+  x
+}
+
+# Aplicar la normalización a cada lista en 'all.outliers'
+all.outliers <- lapply(all.outliers, normalize_length, max_length = max_length)
+
+# Convertir la lista normalizada en un data.frame
+all.outliers <- data.frame(all.outliers)
+```
+
+```{r, fig.height=10, fig.width=5}
+# Convertimos el data frame a un vector para hacer la tabla
+all_values.outliers <- unlist(all.outliers, use.names = FALSE)
+
+# Usamos table() para contar las frecuencias de cada muestra
+table_values <- table(all_values.outliers)
+
+# Filtramos para mostrar solo las muestras que se repiten
+repeated_samples <- names(table_values[table_values > 1])
+
+# Unlist with names to track the original column of each value
+all_values_named <- unlist(all.outliers, use.names = TRUE)
+
+# Extract unique non-NA samples
+unique_samples <- unique(all_values_named[!is.na(all_values_named)])
+
+# Create an empty matrix to fill with presence (1) or absence (0)
+incidence_matrix <- matrix(0, nrow = length(unique_samples), ncol = length(all.outliers))
+rownames(incidence_matrix) <- unique_samples
+colnames(incidence_matrix) <- names(all.outliers)
+
+# Populate the incidence matrix
+for (col in names(all.outliers)) {
+  present_samples <- all.outliers[[col]][!is.na(all.outliers[[col]])]  # Extract non-NA samples from column
+  incidence_matrix[rownames(incidence_matrix) %in% present_samples, col] <- 1
+}
+
+# Melt the incidence matrix for ggplot
+melted_incidence_matrix <- melt(incidence_matrix, varnames = c("sample", "column"), value.name = "presence")
+
+colnames(melted_incidence_matrix)[3] <- "presence"
+
+# Convertir la matriz de incidencia en un data frame
+incidence_df <- as.data.frame(incidence_matrix)
+# Crear un data frame para contar y listar las columnas de aparición
+summary_df <- data.frame(
+  sample = rownames(incidence_df),
+  count = rowSums(incidence_df),
+  columns = apply(incidence_df, 1, function(row) paste(names(df)[as.logical(row)], collapse = ", "))
+)
+
+# Ordenar el summary_df para mejorar la visualización
+summary_df <- summary_df %>% 
+  arrange(desc(count)) %>% 
+  mutate(sample = factor(sample, levels = sample))
+
+# # Crear el gráfico de barras
+# ggplot(summary_df, aes(x = sample, y = count, fill = count)) +  # Mostrar solo las primeras 20 muestras para claridad
+#   geom_bar(stat = "identity", color = "black", show.legend = FALSE) +
+#   coord_flip() +  # Invertir el gráfico para mejor visualización de etiquetas
+#   labs(x = "Sample", y = "Count of Appearances", title = "Sample Appearances Across dimensions") +
+#   theme_minimal() +
+#   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+#         axis.title.x = element_text(size = 12, face = "bold"),
+#         axis.title.y = element_text(size = 12, face = "bold"),
+#         plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+```
+
+```{r, fig.height=15, fig.width=5}
+# Calcular el número total de presencias para cada muestra
+total_presences <- rowSums(incidence_matrix)
+melted_incidence_matrix$total_presence <- total_presences[as.character(melted_incidence_matrix$sample)]
+
+melted_incidence_matrix$column <- gsub(pattern = "outliers.", replacement = "", x = melted_incidence_matrix$column)
+
+melted_incidence_matrix$sample <- gsub(pattern = "_.*", replacement = "", x = melted_incidence_matrix$sample)
+
+filtered_data <- melted_incidence_matrix %>% 
+  filter(presence == 1, total_presence >=2) %>%
+  arrange(desc(total_presence)) %>%
+  mutate(sample = factor(sample, levels = unique(sample)))
+
+ggplot(filtered_data, aes(x = column, y = sample, size = total_presence)) +
+  geom_point(color = "steelblue") +
+  scale_size(range = c(2, 6), guide = "none") +  # Adjustable size scale with no size legend
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "right") +
+  labs(y = "Sample", x= "Dimension", title = "Presence of Samples Across Dimensions", size = "Total Presence")
+```
+
+## Diagrama de Venn
+
+```{r}
+lista.outliers <- lapply(all.outliers, function(x) unique(na.omit(x)))
+```
+
+```{r}
+# Generar el diagrama de Venn
+venn.plot <- venn.diagram(
+  x = lista.outliers[1:3],
+  category.names = c("PCA", "tSNE", "UMAP"),
+  filename = NULL,
+  output = FALSE,  
+  fill = c("#440154ff", '#21908dff', '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = c(0, 0, 0), #posición de las categorías
+  cat.dist = 0.05, #distancia de las categorías
+  rotation.degree = 0, 
+  margin = 0.05, # hacerla más pequeña
+  lwd = 0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = paste0("Diagrama Venn KEGG geneset"),
+  main.fontface = "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 1)
+)
+
+# Calcular la intersección
+interseccion_ABC <- Reduce(intersect, lista.outliers[1:3])
+
+# Dibuja el diagrama de Venn y el texto de la intersección
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
 
 
 
+# interseccion_AB <- Reduce(intersect, lista.outliers[1:2])
+# grid.text(label = paste(gsub("_.*","",interseccion_AB[!(interseccion_AB %in% interseccion_ABC)]), collapse = "\n"), 
+#           x = 0.68, 
+#           y = 0.33, 
+#           gp = gpar(fontsize = 8, 
+#                     col = "black",
+#                     fontface = "italic"))
+# 
+# interseccion_AC <- Reduce(intersect, lista.outliers[c(1,3)])
+# grid.text(label = paste(gsub("_.*","",interseccion_AC[!(interseccion_AC %in% interseccion_ABC)]), collapse = "\n"), 
+#           x = 0.365, 
+#           y = 0.25, 
+#           gp = gpar(fontsize = 8, 
+#                     col = "black",
+#                     fontface = "italic"))
+```
+
+```{r}
+reactable(covs2.casos %>%
+  filter(mrna_id %in% names(total_presences[total_presences == 3]))
+)
+```
 
 
+# Enriquecimiento diferencial
 
+## PCA
 
+```{r}
+# # Instalación de los paquetes necesarios
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# 
+# BiocManager::install("clusterProfiler", force = T)
+# BiocManager::install("org.Hs.eg.db")
+# BiocManager::install("enrichplot")
+# 
+# # Cargar los paquetes
+# library(clusterProfiler)
+# library(org.Hs.eg.db)
+# library(enrichplot)
+# 
+# # Lista de genes
+# best50.loadings.pc1.pos <- rownames(data.frame(loading = head(sort(loading.pc1.pos, decreasing = TRUE), 50)))
+# best50.loadings.pc1.neg <- data.frame(loading =head(sort(loading.pc1.neg, decreasing = FALSE), 5))
+# best50.loadings.pc2.pos <- data.frame(loading =head(sort(loading.pc2.pos, decreasing = TRUE), 5))
+# best50.loadings.pc2.neg <- data.frame(loading =head(sort(loading.pc2.neg, decreasing = FALSE), 5))
+# 
+# # Preparar los datos de genes
+# gene_list <- bitr(best50.loadings.pc1.pos, fromType="ENTREZID", toType=c("ENSEMBL", "SYMBOL"), OrgDb="org.Hs.eg.db")
+# 
+# # Análisis de sobre-representación usando la base de datos KEGG
+# ego <- enrichGO(gene = best50.loadings.pc1.pos, 
+#                 OrgDb = "org.Hs.eg.db", 
+#                 keyType = "SYMBOL", 
+#                 ont = "ALL", 
+#                 pAdjustMethod = "BH", 
+#                 qvalueCutoff = 0.05, 
+#                 readable = TRUE)
+# 
+# barplot(ego, showCategory=10)
+# 
+# 
+# library(org.Hs.eg.db)
+# 
+# # Check if the top gene symbols are valid
+# valid_genes <- keys(org.Hs.eg.db, keytype = "SYMBOL")
+# head(valid_genes)
+# 
+# # Filter your gene list to include only valid genes
+# valid_gene_list <- best50.loadings.pc1.pos[best50.loadings.pc1.pos %in% valid_genes]
+# 
+# # If valid_gene_list is significantly shorter, it indicates many invalid gene symbols.
+# length(valid_gene_list)
+# 
+# sorted_valid_gene_list <- sort(best50.loadings.pc1.pos, decreasing = TRUE)
+# 
+# 
+# gse <- gseGO(geneList= sorted_valid_gene_list, 
+#              ont ="ALL", 
+#              keyType = "SYMBOL", 
+#              pvalueCutoff = 0.05, 
+#              verbose = TRUE, 
+#              OrgDb = "org.Hs.eg.db", 
+#              pAdjustMethod = "none")
+# 
+# 
+# require(DOSE)
+# ridgeplot(gse)
+
+```
 
 
