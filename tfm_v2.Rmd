@@ -39,6 +39,10 @@ library(reactable) # para tablas interactivas
 library(factoextra)
 library(ggstatsplot) # para barras de porcentajes de las tablas de contingencia
 library(UpSetR) # para diagramas de upset
+library(gprofiler2) # enriquecimiento grofiler
+library(clusterProfiler) # para enriquecimientos
+library(enrichplot) # plots de enriquecimiento
+library(DOSE) # needed to convert to enrichResult object
 ```
 
 # Leyendo datos
@@ -184,7 +188,7 @@ plot1 <- ggplot(df, aes(x = PC1)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
   geom_vline(xintercept = mean(df$PC1) + 1.5*pca_KEGG$sdev[1], linetype = "dashed", color = "blue") +
   geom_vline(xintercept = mean(df$PC1) - 1.5*pca_KEGG$sdev[1], linetype = "dashed", color = "blue") +
-  labs(title = "PC1 density with 2*SD scaled PCA") +
+  labs(title = "PC1 density with 1.5*SD scaled PCA") +
   geom_text(data = outlierspc1, 
             aes(x = outlierspc1[,1], y= 0, label = rownames(outlierspc1)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
@@ -195,7 +199,7 @@ plot2 <- ggplot(df, aes(x = PC2)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
   geom_vline(xintercept = mean(df$PC2) + 1.5*pca_KEGG$sdev[2], linetype = "dashed", color = "blue") +
   geom_vline(xintercept = mean(df$PC2) - 1.5*pca_KEGG$sdev[2], linetype = "dashed", color = "blue") +
-  labs(title = "PC2 density with 2*SD scaled PCA") +
+  labs(title = "PC2 density with 1.5*SD scaled PCA") +
   geom_text(data = outlierspc2, 
             aes(x = outlierspc2[,1], y= 0, label = rownames(outlierspc2)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
@@ -274,7 +278,7 @@ plot1 <- ggplot(tsne.data, aes(x = V1)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
   geom_vline(xintercept = mean.tsne1 + 1.5*sd.tsne1, linetype = "dashed", color = "blue") +
   geom_vline(xintercept = mean.tsne1 - 1.5*sd.tsne1, linetype = "dashed", color = "blue") +
-  labs(title = "tSNE1 density with 2*SD tSNE") +
+  labs(title = "tSNE1 density with 1.5*SD tSNE") +
   geom_text(data = outliers.tsne1, 
             aes(x = outliers.tsne1[,1], y= 0, label = rownames(outliers.tsne1)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
@@ -285,7 +289,7 @@ plot2 <- ggplot(tsne.data, aes(x = V2)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
   geom_vline(xintercept = mean.tsne2 + 1.5*sd.tsne2, linetype = "dashed", color = "blue") +
   geom_vline(xintercept = mean.tsne2 - 1.5*sd.tsne2, linetype = "dashed", color = "blue") +
-  labs(title = "tSNE2 density with 2*SD tSNE") +
+  labs(title = "tSNE2 density with 1.5*SD tSNE") +
   geom_text(data = outliers.tsne2, 
             aes(x = outliers.tsne2[,2], y= 0, label = rownames(outliers.tsne2)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
@@ -370,7 +374,7 @@ plot1 <- ggplot(umap.data, aes(x = V1)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
   geom_vline(xintercept = mean.umap1 + 1.5*sd.umap1, linetype = "dashed", color = "blue") +
   geom_vline(xintercept = mean.umap1 - 1.5*sd.umap1, linetype = "dashed", color = "blue") +
-  labs(title = "UMAP1 density with 2*SD UMAP") +
+  labs(title = "UMAP1 density with 1.5*SD UMAP") +
   geom_text(data = outliers.umap1, 
             aes(x = outliers.umap1[,1], y= 0, label = rownames(outliers.umap1)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
@@ -381,7 +385,7 @@ plot2 <- ggplot(umap.data, aes(x = V2)) +
   geom_density(fill = "#00CED1", alpha = 0.5) +
   geom_vline(xintercept = mean.umap2 + 1.5*sd.umap2, linetype = "dashed", color = "blue") +
   geom_vline(xintercept = mean.umap2 - 1.5*sd.umap2, linetype = "dashed", color = "blue") +
-  labs(title = "UMAP2 density with 2*SD UMAP") +
+  labs(title = "UMAP2 density with 1.5*SD UMAP") +
   geom_text(data = outliers.umap2, 
             aes(x = outliers.umap2[,2], y= 0, label = rownames(outliers.umap2)), 
             vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
@@ -842,12 +846,188 @@ grid.arrange(grobs = plot_list, ncol = 2)
 
 
 ## tSNE
+### CASOS
 
 ```{r}
 ratios.tsne.kegg <- data.frame.ratios(covs2.casos, "sampleset_tSNE")
 ```
 
+```{r}
+ratio.ouliers.vs.no.ouliers <- data.frame(matrix(ncol = 0, nrow = length(rownames(ratios.tsne.kegg))))
+
+for (i in colnames(ratios.tsne.kegg)) {
+  if (i == "Not in both") {
+    next
+    
+  } else {
+    ratio <- data.frame(log2(ratios.tsne.kegg[[i]] / ratios.tsne.kegg[["Not in both"]]))
+    
+    nombre.filas <- rownames(ratios.tsne.kegg)
+    
+    colnames(ratio)[1] <- paste(i, " vs No outliers")
+    
+    ratio.ouliers.vs.no.ouliers <- cbind(ratio.ouliers.vs.no.ouliers, ratio)
+    rownames(ratio.ouliers.vs.no.ouliers) <- nombre.filas  
+  }
+}
+ratio.ouliers.vs.no.ouliers <- round(ratio.ouliers.vs.no.ouliers, 2)
+ratio.ouliers.vs.no.ouliers <- ratio.ouliers.vs.no.ouliers %>%
+  filter(row_number() != which(rownames(ratio.ouliers.vs.no.ouliers) == "neuroStatus"))
+ratio.ouliers.vs.no.ouliers <- replace(ratio.ouliers.vs.no.ouliers, is.na(ratio.ouliers.vs.no.ouliers), "sin casos")
+
+```
+
+ratio outliers vs no outliers
+
+```{r}
+reactable(ratio.ouliers.vs.no.ouliers)
+reactable(data.frame(t(ratio.ouliers.vs.no.ouliers)))
+```
+
+#### Test estadistico
+
+Calculo test estadistico
+
+```{r,warning=FALSE}
+reactable(calculo.test(df.covs = covs2.casos, sampleset = "sampleset_tSNE"))
+```
+
+```{r, warning=FALSE}
+tests <- calculo.test(df.covs = covs2.casos, sampleset = "sampleset_tSNE") %>%
+  filter(p.value <= 0.1) 
+```
+
+```{r, fig.height=8, fig.width=8}
+plot.pvalue.sig <- function(df, test.df) {
+  
+  plots <- list()
+  
+  for (i in 1:nrow(test.df)) {
+    variable <- as.character(test.df[i, 1])
+    component <- as.character(test.df[i, 2])
+    Minimun.expected.frequency <- as.character(test.df[i, 3])
+    test.used <- as.character(test.df[i, 4])
+    p.value <- as.character(test.df[i, 5])
+    
+    df.filtered <- df %>%
+      mutate(modified.class = ifelse(sampleset_tSNE == component, component, paste("Not", component))) %>%
+      dplyr::select(all_of(variable), modified.class) %>%
+      mutate(class = factor(modified.class, levels = c(component, paste("Not", component))))
+    
+    p <- ggbarstats(
+      data = df.filtered, 
+      x = !!sym(variable), 
+      y = class, 
+      xlab = "", title = paste(component, variable), 
+      results.subtitle = FALSE, 
+      subtitle = paste0(test.used, " with p-value = ", p.value, ". \nMinimum expected freq: ", Minimun.expected.frequency))
+    
+    plots[[paste(variable, component)]] <- p
+  }
+  
+  return(plots)
+}
+
+plots <- plot.pvalue.sig(df = covs2.casos, test.df = tests)
+
+plot_list <- lapply(plots, ggplotGrob)
+
+grid.arrange(grobs = plot_list, ncol = 2)
+```
+
+### Casos y sanos
+
+```{r}
+ratios.tSNE.kegg <- data.frame.ratios(covs2, "sampleset_tSNE")
+```
+
+```{r}
+ratio.ouliers.vs.no.ouliers <- data.frame(matrix(ncol = 0, nrow = length(rownames(ratios.tSNE.kegg))))
+
+for (i in colnames(ratios.tSNE.kegg)) {
+  if (i == "Not in both") {
+    next
+    
+  } else {
+    ratio <- data.frame(log2(ratios.tSNE.kegg[[i]] / ratios.tSNE.kegg[["Not in both"]]))
+    
+    nombre.filas <- rownames(ratios.tSNE.kegg)
+    
+    colnames(ratio)[1] <- paste(i, " vs No outliers")
+    
+    ratio.ouliers.vs.no.ouliers <- cbind(ratio.ouliers.vs.no.ouliers, ratio)
+    rownames(ratio.ouliers.vs.no.ouliers) <- nombre.filas  
+  }
+}
+ratio.ouliers.vs.no.ouliers <- round(ratio.ouliers.vs.no.ouliers, 2)
+ratio.ouliers.vs.no.ouliers <- ratio.ouliers.vs.no.ouliers %>%
+  filter(row_number() != which(rownames(ratio.ouliers.vs.no.ouliers) == "neuroStatus"))
+ratio.ouliers.vs.no.ouliers <- replace(ratio.ouliers.vs.no.ouliers, is.na(ratio.ouliers.vs.no.ouliers), "sin casos")
+
+```
+
+ratio outliers vs no outliers
+
+```{r}
+reactable(ratio.ouliers.vs.no.ouliers)
+reactable(data.frame(t(ratio.ouliers.vs.no.ouliers)))
+```
+
+#### Test estadistico
+
+Calculo test estadistico
+
+```{r,warning=FALSE}
+reactable(calculo.test(df.covs = covs2, sampleset = "sampleset_tSNE"))
+```
+
+```{r, warning=FALSE}
+tests <- calculo.test(df.covs = covs2, sampleset = "sampleset_tSNE") %>%
+  filter(p.value <= 0.1) 
+```
+
+```{r, fig.height=8, fig.width=8}
+
+plot.pvalue.sig <- function(df, test.df) {
+  
+  plots <- list()
+  
+  for (i in 1:nrow(test.df)) {
+    variable <- as.character(test.df[i, 1])
+    component <- as.character(test.df[i, 2])
+    Minimun.expected.frequency <- as.character(test.df[i, 3])
+    test.used <- as.character(test.df[i, 4])
+    p.value <- as.character(test.df[i, 5])
+    
+    df.filtered <- df %>%
+      mutate(modified.class = ifelse(sampleset_tSNE == component, component, paste("Not", component))) %>%
+      dplyr::select(all_of(variable), modified.class) %>%
+      mutate(class = factor(modified.class, levels = c(component, paste("Not", component))))
+    
+    p <- ggbarstats(
+      data = df.filtered, 
+      x = !!sym(variable), 
+      y = class, 
+      xlab = "", title = paste(component, variable), 
+      results.subtitle = FALSE, 
+      subtitle = paste0(test.used, " with p-value = ", p.value, ". \nMinimum expected freq: ", Minimun.expected.frequency))
+    
+    plots[[paste(variable, component)]] <- p
+  }
+  
+  return(plots)
+}
+
+plots <- plot.pvalue.sig(df = covs2, test.df = tests)
+
+plot_list <- lapply(plots, ggplotGrob)
+
+grid.arrange(grobs = plot_list, ncol = 2)
+```
+
 ## UMAP
+
+### CASOS
 
 ```{r}
 ratios.umap.kegg <- data.frame.ratios(covs2.casos, "sampleset_UMAP")
@@ -871,18 +1051,163 @@ for (i in colnames(ratios.umap.kegg)) {
     rownames(ratio.ouliers.vs.no.ouliers) <- nombre.filas  
   }
 }
-
 ratio.ouliers.vs.no.ouliers <- round(ratio.ouliers.vs.no.ouliers, 2)
 ratio.ouliers.vs.no.ouliers <- ratio.ouliers.vs.no.ouliers %>%
   filter(row_number() != which(rownames(ratio.ouliers.vs.no.ouliers) == "neuroStatus"))
-
 ratio.ouliers.vs.no.ouliers <- replace(ratio.ouliers.vs.no.ouliers, is.na(ratio.ouliers.vs.no.ouliers), "sin casos")
+
 ```
+
+ratio outliers vs no outliers
 
 ```{r}
 reactable(ratio.ouliers.vs.no.ouliers)
 reactable(data.frame(t(ratio.ouliers.vs.no.ouliers)))
 ```
+
+#### Test estadistico
+
+Calculo test estadistico
+
+```{r,warning=FALSE}
+reactable(calculo.test(df.covs = covs2.casos, sampleset = "sampleset_UMAP"))
+```
+
+```{r, warning=FALSE}
+tests <- calculo.test(df.covs = covs2.casos, sampleset = "sampleset_UMAP") %>%
+  filter(p.value <= 0.1) 
+```
+
+```{r, fig.height=8, fig.width=8}
+plot.pvalue.sig <- function(df, test.df) {
+  
+  plots <- list()
+  
+  for (i in 1:nrow(test.df)) {
+    variable <- as.character(test.df[i, 1])
+    component <- as.character(test.df[i, 2])
+    Minimun.expected.frequency <- as.character(test.df[i, 3])
+    test.used <- as.character(test.df[i, 4])
+    p.value <- as.character(test.df[i, 5])
+    
+    df.filtered <- df %>%
+      mutate(modified.class = ifelse(sampleset_UMAP == component, component, paste("Not", component))) %>%
+      dplyr::select(all_of(variable), modified.class) %>%
+      mutate(class = factor(modified.class, levels = c(component, paste("Not", component))))
+    
+    p <- ggbarstats(
+      data = df.filtered, 
+      x = !!sym(variable), 
+      y = class, 
+      xlab = "", title = paste(component, variable), 
+      results.subtitle = FALSE, 
+      subtitle = paste0(test.used, " with p-value = ", p.value, ". \nMinimum expected freq: ", Minimun.expected.frequency))
+    
+    plots[[paste(variable, component)]] <- p
+  }
+  
+  return(plots)
+}
+
+plots <- plot.pvalue.sig(df = covs2.casos, test.df = tests)
+
+plot_list <- lapply(plots, ggplotGrob)
+
+grid.arrange(grobs = plot_list, ncol = 2)
+```
+
+### Casos y sanos
+
+```{r}
+ratios.umap.kegg <- data.frame.ratios(covs2, "sampleset_UMAP")
+```
+
+```{r}
+ratio.ouliers.vs.no.ouliers <- data.frame(matrix(ncol = 0, nrow = length(rownames(ratios.umap.kegg))))
+
+for (i in colnames(ratios.umap.kegg)) {
+  if (i == "Not in both") {
+    next
+    
+  } else {
+    ratio <- data.frame(log2(ratios.umap.kegg[[i]] / ratios.umap.kegg[["Not in both"]]))
+    
+    nombre.filas <- rownames(ratios.umap.kegg)
+    
+    colnames(ratio)[1] <- paste(i, " vs No outliers")
+    
+    ratio.ouliers.vs.no.ouliers <- cbind(ratio.ouliers.vs.no.ouliers, ratio)
+    rownames(ratio.ouliers.vs.no.ouliers) <- nombre.filas  
+  }
+}
+ratio.ouliers.vs.no.ouliers <- round(ratio.ouliers.vs.no.ouliers, 2)
+ratio.ouliers.vs.no.ouliers <- ratio.ouliers.vs.no.ouliers %>%
+  filter(row_number() != which(rownames(ratio.ouliers.vs.no.ouliers) == "neuroStatus"))
+ratio.ouliers.vs.no.ouliers <- replace(ratio.ouliers.vs.no.ouliers, is.na(ratio.ouliers.vs.no.ouliers), "sin casos")
+
+```
+
+ratio outliers vs no outliers
+
+```{r}
+reactable(ratio.ouliers.vs.no.ouliers)
+reactable(data.frame(t(ratio.ouliers.vs.no.ouliers)))
+```
+
+#### Test estadistico
+
+Calculo test estadistico
+
+```{r,warning=FALSE}
+reactable(calculo.test(df.covs = covs2, sampleset = "sampleset_UMAP"))
+```
+
+```{r, warning=FALSE}
+tests <- calculo.test(df.covs = covs2, sampleset = "sampleset_UMAP") %>%
+  filter(p.value <= 0.1) 
+```
+
+```{r, fig.height=8, fig.width=8}
+plot.pvalue.sig <- function(df, test.df) {
+  
+  plots <- list()
+  
+  for (i in 1:nrow(test.df)) {
+    variable <- as.character(test.df[i, 1])
+    component <- as.character(test.df[i, 2])
+    Minimun.expected.frequency <- as.character(test.df[i, 3])
+    test.used <- as.character(test.df[i, 4])
+    p.value <- as.character(test.df[i, 5])
+    
+    df.filtered <- df %>%
+      mutate(modified.class = ifelse(sampleset_UMAP == component, component, paste("Not", component))) %>%
+      dplyr::select(all_of(variable), modified.class) %>%
+      mutate(class = factor(modified.class, levels = c(component, paste("Not", component))))
+    
+    p <- ggbarstats(
+      data = df.filtered, 
+      x = !!sym(variable), 
+      y = class, 
+      xlab = "", title = paste(component, variable), 
+      results.subtitle = FALSE, 
+      subtitle = paste0(test.used, " with p-value = ", p.value, ". \nMinimum expected freq: ", Minimun.expected.frequency))
+    
+    plots[[paste(variable, component)]] <- p
+  }
+  
+  return(plots)
+}
+plots <- plot.pvalue.sig(df = covs2, test.df = tests)
+
+plot_list <- lapply(plots, ggplotGrob)
+
+if (length(plot_list) > 4) {
+  grid.arrange(grobs = c(plot_list[1], plot_list[2], plot_list[3], plot_list[4]), ncol = 2)
+  grid.arrange(grobs = c(plot_list[5], plot_list[6], plot_list[7], plot_list[8]), ncol = 2)
+  grid.arrange(grobs = c(plot_list[9], plot_list[10]), ncol = 2)
+}
+```
+
 
 # Mecanismo de anotación dependiente del mecanismo de detección
 
@@ -903,7 +1228,7 @@ loading.pc2.pos <- loadings[loadings[, "PC2"] > 0, "PC2"]
 loading.pc2.neg <- loadings[loadings[, "PC2"] < 0, "PC2"]
 
 best.loadings.pc1.pos <- data.frame(loading = head(sort(loading.pc1.pos, decreasing = TRUE), 5))
-best.loadings.pc1.neg <- data.frame(loading =head(sort(loading.pc1.neg, decreasing = FALSE), 5), pc = "mPC1 negative")
+best.loadings.pc1.neg <- data.frame(loading = head(sort(loading.pc1.neg, decreasing = FALSE), 5), pc = "mPC1 negative")
 best.loadings.pc2.pos <- data.frame(loading =head(sort(loading.pc2.pos, decreasing = TRUE), 5), pc = "mPC2 positive")
 best.loadings.pc2.neg <- data.frame(loading =head(sort(loading.pc2.neg, decreasing = FALSE), 5), pc = "mPC2 negative")
 ```
@@ -966,8 +1291,7 @@ p <- ggplot(para.plot, aes_string(x = "PC1.KEGG", y = "PC2.KEGG", color = "sampl
       legend.title = element_blank(),
       legend.text = element_text(size = 12),
       text = element_text(size = 12),
-      legend.key.size = unit(0.5, "cm"),
-      plot.margin = margin(5, 5, 5, 5)) +
+      legend.key.size = unit(0.5, "cm")) +
   geom_point(data= (covs2 %>% filter(neuroStatus == 0)), aes_string(x = "PC1.KEGG", y = "PC2.KEGG", color = "sampleset_PCA"), alpha = 0.5)+ 
   geom_segment(data = pca.var.coord.best.loadings, aes(x= 0, y = 0, xend = Dim.1*20, yend = Dim.2*20, color = PC), arrow = arrow(length = unit(0.05, "inches"), type = "closed"),
                size = 0.4) +
@@ -984,6 +1308,592 @@ p <- ggplot(para.plot, aes_string(x = "PC1.KEGG", y = "PC2.KEGG", color = "sampl
 
 p
 ```
+
+### Enriquecimiento 
+
+```{r}
+loading.pc1.pos.ordered <- data.frame(loading = sort(loading.pc1.pos, decreasing = TRUE))
+loading.pc1.neg.ordered <- data.frame(loading = abs(sort(loading.pc1.neg, decreasing = F)))
+loading.pc2.pos.ordered <- data.frame(loading = sort(loading.pc2.pos, decreasing = TRUE))
+loading.pc2.neg.ordered <- data.frame(loading = abs(sort(loading.pc2.neg, decreasing = F)))
+
+p1 <- loading.pc1.pos.ordered %>%
+  rownames_to_column() %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = loading)) +  
+    geom_point() +
+    geom_line() +
+    labs(x = "Número Genes", title = "PC1+") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 10))
+
+p2 <- loading.pc1.neg.ordered %>%
+  rownames_to_column() %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = loading)) +  
+    geom_point() +
+    geom_line() +
+    labs(x = "Número Genes", title = "PC1-") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 10))
+
+p3 <- loading.pc2.pos.ordered %>%
+  rownames_to_column() %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = loading)) +  
+    geom_point() +
+    geom_line() +
+    labs(x = "Número Genes", title = "PC2+") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 10))
+
+p4 <- loading.pc2.neg.ordered %>%
+  rownames_to_column() %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = loading)) +  
+    geom_point() +
+    geom_line() +
+    labs(x = "Número Genes", title = "PC2-") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 10))
+
+grid.arrange(p1, p2, p3, p4, ncol = 2)
+```
+
+#### GO
+
+```{r}
+multi_gp = gost(list("PC1+" = row.names(head(loading.pc1.pos.ordered, 30)),
+                     "PC1-" = row.names(head(loading.pc1.neg.ordered, 30)),
+                     "PC2+" = row.names(head(loading.pc2.pos.ordered, 30)),
+                     "PC2-" = row.names(head(loading.pc2.neg.ordered, 30))),
+                organism = "hsapiens", 
+                multi_query = T, 
+                sources = "GO", 
+                highlight = T
+)
+```
+
+```{r, fig.height=10, fig.width=10}
+gostplot(multi_gp, interactive = T, capped = F)
+```
+
+```{r, fig.height=10}
+loading.pc1.pos.ordered.converted = gconvert(row.names(head(loading.pc1.pos.ordered, 30)))
+loading.pc1.neg.ordered.converted = gconvert(row.names(head(loading.pc1.neg.ordered, 30)))
+loading.pc2.pos.ordered.converted = gconvert(row.names(head(loading.pc2.pos.ordered, 30)))
+loading.pc2.neg.ordered.converted = gconvert(row.names(head(loading.pc2.neg.ordered, 30)))
+
+# enrichment analysis using gene names
+multi_gp = gost(list("PC1+" = loading.pc1.pos.ordered.converted$name,
+                     "PC1-" = loading.pc1.neg.ordered.converted$name,
+                     "PC2+" = loading.pc2.pos.ordered.converted$name,
+                     "PC2-" = loading.pc2.neg.ordered.converted$name), 
+          multi_query = FALSE, 
+          #ordered_query = T,
+          evcodes = TRUE, 
+          sources = "GO",
+          highlight = T)
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+#quitar los duplicados
+duplicados <- gp_mod$ID[duplicated(gp_mod$ID) | duplicated(gp_mod$ID, fromLast = TRUE)]
+gp_mod_unicos <- gp_mod[!(gp_mod$ID %in% duplicados), ]
+
+row.names(gp_mod_unicos) <- gp_mod_unicos$ID
+
+# define as compareClusterResult object
+gp_mod_cluster = new("compareClusterResult", compareClusterResult = gp_mod_unicos)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod_unicos)
+
+enrichplot::dotplot(gp_mod_cluster)
+```
+
+#### KEGG
+
+```{r}
+multi_gp = gost(list("PC1+" = row.names(head(loading.pc1.pos.ordered, 30)),
+                     "PC1-" = row.names(head(loading.pc1.neg.ordered, 30)),
+                     "PC2+" = row.names(head(loading.pc2.pos.ordered, 30)),
+                     "PC2-" = row.names(head(loading.pc2.neg.ordered, 30))),
+                organism = "hsapiens", 
+                multi_query = T, sources = "KEGG"
+)
+```
+
+```{r, fig.height=10, fig.width=10}
+gostplot(multi_gp, interactive = T, capped = F)
+```
+
+```{r}
+loading.pc1.pos.ordered.converted = gconvert(row.names(head(loading.pc1.pos.ordered, 30)))
+loading.pc1.neg.ordered.converted = gconvert(row.names(head(loading.pc1.neg.ordered, 30)))
+loading.pc2.pos.ordered.converted = gconvert(row.names(head(loading.pc2.pos.ordered, 30)))
+loading.pc2.neg.ordered.converted = gconvert(row.names(head(loading.pc2.neg.ordered, 30)))
+
+# enrichment analysis using gene names
+multi_gp = gost(list("PC1+" = loading.pc1.pos.ordered.converted$name,
+                     "PC1-" = loading.pc1.neg.ordered.converted$name,
+                     "PC2+" = loading.pc2.pos.ordered.converted$name,
+                     "PC2-" = loading.pc2.neg.ordered.converted$name), 
+          multi_query = FALSE, evcodes = TRUE, sources = "KEGG")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+#quitar los duplicados
+duplicados <- gp_mod$ID[duplicated(gp_mod$ID) | duplicated(gp_mod$ID, fromLast = TRUE)]
+gp_mod_unicos <- gp_mod[!(gp_mod$ID %in% duplicados), ]
+
+row.names(gp_mod_unicos) <- gp_mod_unicos$ID
+
+# define as compareClusterResult object
+gp_mod_cluster = new("compareClusterResult", compareClusterResult = gp_mod_unicos)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod_unicos)
+
+enrichplot::dotplot(gp_mod_cluster)
+```
+
+#### REAC
+
+```{r}
+multi_gp = gost(list("PC1+" = row.names(head(loading.pc1.pos.ordered, 30)),
+                     "PC1-" = row.names(head(loading.pc1.neg.ordered, 30)),
+                     "PC2+" = row.names(head(loading.pc2.pos.ordered, 30)),
+                     "PC2-" = row.names(head(loading.pc2.neg.ordered, 30))),
+                organism = "hsapiens", 
+                ordered_query = T, 
+                multi_query = T, sources = "REAC"
+)
+```
+
+```{r, fig.height=10, fig.width=10}
+gostplot(multi_gp, interactive = T, capped = F)
+```
+
+```{r, fig.height=10}
+loading.pc1.pos.ordered.converted = gconvert(row.names(head(loading.pc1.pos.ordered, 30)))
+loading.pc1.neg.ordered.converted = gconvert(row.names(head(loading.pc1.neg.ordered, 30)))
+loading.pc2.pos.ordered.converted = gconvert(row.names(head(loading.pc2.pos.ordered, 30)))
+loading.pc2.neg.ordered.converted = gconvert(row.names(head(loading.pc2.neg.ordered, 30)))
+
+# enrichment analysis using gene names
+multi_gp = gost(list("PC1+" = loading.pc1.pos.ordered.converted$name,
+                     "PC1-" = loading.pc1.neg.ordered.converted$name,
+                     "PC2+" = loading.pc2.pos.ordered.converted$name,
+                     "PC2-" = loading.pc2.neg.ordered.converted$name), 
+          multi_query = FALSE, evcodes = TRUE, sources = "REAC")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+#quitar los duplicados
+duplicados <- gp_mod$ID[duplicated(gp_mod$ID) | duplicated(gp_mod$ID, fromLast = TRUE)]
+gp_mod_unicos <- gp_mod[!(gp_mod$ID %in% duplicados), ]
+
+row.names(gp_mod_unicos) <- gp_mod_unicos$ID
+
+# define as compareClusterResult object
+gp_mod_cluster = new("compareClusterResult", compareClusterResult = gp_mod_unicos)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod_unicos)
+
+enrichplot::dotplot(gp_mod_cluster)
+```
+
+## tSNE
+
+```{r}
+tsne.data <- data.frame(tsne$Y)[,1:2]
+colnames(tsne.data) <- c("tsne1", "tsne2")
+rownames(tsne.data) <- rownames(mat_exp_alz_genes)
+
+covs2 <- merge(covs2, tsne.data, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
+
+
+```{r, fig.width=8, fig.height=6}
+tsne.data <- data.frame(tsne$Y)[,1:2]
+colnames(tsne.data) <- c("tsne1", "tsne2")
+rownames(tsne.data) <- rownames(mat_exp_alz_genes)
+
+covs2_df <- covs2.casos %>%
+  dplyr::select(mrna_id, sampleset_tSNE)
+
+para.plot <- merge(tsne.data, covs2_df, by = "row.names")
+rownames(para.plot) <- para.plot$Row.names
+para.plot$Row.names <- NULL
+
+ggplot(para.plot, aes_string(x = "tsne1", y = "tsne2", color = "sampleset_tSNE")) +
+    geom_point(show.legend = TRUE, size = 3) +
+    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outliers.tsne1) | mrna_id %in% rownames(outliers.tsne2), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 30, # Reduce el número máximo de solapamientos
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = "tSNE",
+         x = "tsne1", y = "tsne2") +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm")) +
+  geom_point(data= (covs2 %>% filter(neuroStatus == 0)), aes_string(x = "tsne1", y = "tsne2", color = "sampleset_tSNE"), alpha = 0.5) 
+```
+
+## UMAP
+
+```{r}
+umap.data <- data.frame(umap.ad$layout)[,1:2]
+colnames(umap.data) <- c("umap1", "umap2")
+
+covs2 <- merge(covs2, umap.data, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
+
+
+```{r, fig.width=8, fig.height=6}
+umap.data <- data.frame(umap.ad$layout)[,1:2]
+colnames(umap.data) <- c("umap1", "umap2")
+
+covs2_df <- covs2.casos %>%
+  dplyr::select(mrna_id, sampleset_UMAP)
+
+para.plot <- merge(umap.data, covs2_df, by = "row.names")
+rownames(para.plot) <- para.plot$Row.names
+para.plot$Row.names <- NULL
+
+ggplot(para.plot, aes_string(x = "umap1", y = "umap2", color = "sampleset_UMAP")) +
+    geom_point(show.legend = TRUE, size = 3) +
+    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outliers.umap1) | mrna_id %in% rownames(outliers.umap2), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 30, # Reduce el número máximo de solapamientos
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = "UMAP",
+         x = "umap1", y = "umap2") +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm")) +
+  geom_point(data= (covs2 %>% filter(neuroStatus == 0)), aes_string(x = "umap1", y = "umap2", color = "sampleset_UMAP"), alpha = 0.5) 
+```
+
+### Seleccion genes importantes para mUMAP1+
+
+```{r}
+# outliers mUMAP1+
+# Crear un vector con todos los individuos etiquetados como "Sano"
+estado <- rep(0, nrow(mat_exp_alz_genes))
+
+# Reemplazar "Sano" con "Enfermo" para los individuos en la lista de enfermos
+estado[rownames(mat_exp_alz_genes) %in% mUMAP1.pos] <- 1
+
+# Añadir la nueva columna a la matriz de expresión de genes
+mat_exp_alz_genes.RF <- data.frame(cbind(mat_exp_alz_genes, class = estado))
+
+mat_exp_alz_genes.RF$class <- as.factor(mat_exp_alz_genes.RF$class)
+
+```
+
+```{r}
+library(caret)
+library(randomForest)
+library(doParallel)
+num_cores <- detectCores() - 2
+registerDoParallel(cores=num_cores)
+```
+
+```{r}
+modelLookup("ranger")
+```
+
+Aquí he utilizado el parámetro importance = "permutation"
+
+```{r, eval=FALSE}
+# Definir una función para calcular la Accuracy balanceada
+balanced_accuracy <- function(data, lev = NULL, model = NULL) {
+  cm <- confusionMatrix(data$pred, data$obs)
+  sensitivity <- cm$byClass["Sensitivity"]
+  specificity <- cm$byClass["Specificity"]
+  balanced_acc <- mean(c(sensitivity, specificity))
+  c(BalancedAccuracy = balanced_acc)
+}
+
+# Definir las métricas de evaluación que queremos utilizar
+RFControl <- trainControl(
+  method = "cv", 
+  number = 10,
+  repeats = 10,
+  summaryFunction = balanced_accuracy,
+  allowParallel = TRUE,
+  seeds = NULL, 
+  returnResamp = "final",
+)
+
+set.seed(1234)
+sqr.genes <- round(sqrt(ncol(mat_exp_alz_genes.RF)))
+
+mygrid <- expand.grid(mtry = c(sqr.genes - 2, sqr.genes - 1, sqr.genes, sqr.genes+1, sqr.genes+2),
+                      splitrule = c("gini", "extratrees"),
+                      min.node.size = 1)
+trees <- seq(500, 2000, 500) 
+
+rf.cv.10 <- list() # lista vacia para meter los resultados de cada bucle
+for (tree in trees){ # bucle en cada pasada hace un modelo con un número de arboles distintos
+  modelo <- train(class ~., data=mat_exp_alz_genes.RF,
+                  method="ranger",
+                  tuneGrid=mygrid,
+                  trControl=RFControl, 
+                  ntree = tree,
+                  metric = "BalancedAccuracy",
+                  importance = "permutation" # o impurity permutation https://arxiv.org/abs/1407.7502
+  )
+  rf.cv.10[[paste(tree, "trees")]] <- modelo # metemos el modelo en la lista
+}
+saveRDS(rf.cv.10, "rf.cv.10.RDS")
+```
+
+```{r}
+rf.cv.10 <- readRDS("rf.cv.10.RDS")
+
+# Hacemos dataframe con las métricas de cada modelo
+datos_combinados <- rbind(
+  data.frame(mtry = rf.cv.10$`500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`500 trees`$results$BalancedAccuracy, Trees = "500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1000 trees`$results$BalancedAccuracy, Trees = "1000 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1500 trees`$results$BalancedAccuracy, Trees = "1500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`2000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`2000 trees`$results$BalancedAccuracy, Trees = "2000 trees", Metric = "Balanced Accuracy")
+)
+
+datos_combinados %>%
+  # filter(splitrule == "extratrees") %>%
+  filter(Metric == "Balanced Accuracy") %>%
+  ggplot(aes(x = mtry, y = MetricValue, color = Trees)) +
+  geom_point(size = 4) +
+  geom_line(linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Mtry", y = "Valor de la Métrica", title = "Comparación de Balanced Accuracy con splitrule") +
+  facet_wrap(~ splitrule) 
+```
+
+```{r}
+models <- resamples(rf.cv.10)
+
+summary(models)
+```
+
+
+```{r}
+important.genes <- varImp(rf.cv.10$`500 trees`)$importance %>% 
+  rownames_to_column() %>%
+  arrange(desc(Overall))
+
+important.genes %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  # Crear una columna numérica para el índice
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = Overall)) +  # Usar row_index en el eje X
+    geom_point() +
+    geom_line() +
+    labs(x = "Número Genes", title = "Importancia genes en RF") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 10))
+
+```
+
+### Enriquecimiento 
+
+#### GO
+
+```{r}
+important.genes.top <- important.genes %>%
+  head(., 30) 
+
+top_genes <- important.genes.top$rowname
+
+gp_up_ordered = gost(top_genes, organism = "hsapiens",
+		        #ordered_query = TRUE, 
+		        sources = "GO", 
+		        highlight = T)
+
+gostplot(gp_up_ordered, interactive = T, capped = F)
+```
+
+```{r}
+top_genes.gprofiler = gconvert(top_genes)
+
+
+# enrichment analysis using gene names
+multi_gp = gost(top_genes.gprofiler$name, 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "GO", 
+          highlight = T)
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+#quitar los duplicados
+duplicados <- gp_mod$ID[duplicated(gp_mod$ID) | duplicated(gp_mod$ID, fromLast = TRUE)]
+gp_mod_unicos <- gp_mod[!(gp_mod$ID %in% duplicados), ]
+
+row.names(gp_mod_unicos) <- gp_mod_unicos$ID
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod_unicos)
+
+enrichplot::dotplot(gp_mod_enrich)
+```
+
+#### KEGG
+
+```{r}
+gp_up_ordered = gost(top_genes, organism = "hsapiens",
+		        ordered_query = TRUE, sources = "KEGG")
+
+gostplot(gp_up_ordered, interactive = T)
+```
+
+```{r, fig.height=8}
+top_genes.gprofiler = gconvert(top_genes)
+
+
+# enrichment analysis using gene names
+multi_gp = gost(top_genes.gprofiler$name, 
+          multi_query = FALSE, evcodes = TRUE, sources = "KEGG")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+#quitar los duplicados
+duplicados <- gp_mod$ID[duplicated(gp_mod$ID) | duplicated(gp_mod$ID, fromLast = TRUE)]
+gp_mod_unicos <- gp_mod[!(gp_mod$ID %in% duplicados), ]
+
+row.names(gp_mod_unicos) <- gp_mod_unicos$ID
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod_unicos)
+
+enrichplot::dotplot(gp_mod_enrich, showCategory = 20)
+```
+
+#### REAC
+
+```{r}
+gp_up_ordered = gost(top_genes, organism = "hsapiens",
+		        ordered_query = TRUE, sources = "REAC")
+
+gostplot(gp_up_ordered, interactive = T, capped = F)
+```
+
+```{r, fig.height=8}
+top_genes.gprofiler = gconvert(top_genes)
+
+
+# enrichment analysis using gene names
+multi_gp = gost(top_genes.gprofiler$name, 
+          multi_query = FALSE, evcodes = TRUE, sources = "REAC")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+#quitar los duplicados
+duplicados <- gp_mod$ID[duplicated(gp_mod$ID) | duplicated(gp_mod$ID, fromLast = TRUE)]
+gp_mod_unicos <- gp_mod[!(gp_mod$ID %in% duplicados), ]
+
+row.names(gp_mod_unicos) <- gp_mod_unicos$ID
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod_unicos)
+
+enrichplot::dotplot(gp_mod_enrich, showCategory = 10)
+```
+
 
 # Comparaciones
 
@@ -1090,6 +2000,8 @@ upset(fromList(lista.outliers),
       queries = list(list(query = intersects, params = list("PCA.KEGG", 
     "tSNE.KEGG", "UMAP.KEGG"), color = "orange", active = T)),
       )
+# Agregar el título usando grid.text
+grid.text("Casos", x = 0.1, y = 0.95, gp = gpar(fontsize = 20, fontface = "bold"))
 ```
 
 
@@ -1199,6 +2111,8 @@ upset(fromList(lista.outliers),
       queries = list(list(query = intersects, params = list("PCA.KEGG", 
     "tSNE.KEGG", "UMAP.KEGG"), color = "orange", active = T)),
       )
+# Agregar el título usando grid.text
+grid.text("Casos y Sanos", x = 0.2, y = 0.95, gp = gpar(fontsize = 20, fontface = "bold"))
 ```
 
 
@@ -1207,73 +2121,4 @@ reactable(covs2 %>%
   filter(sampleset_PCA != "Not in both" & sampleset_tSNE != "Not in both" & sampleset_UMAP != "Not in both")
 )
 ```
-
-# Enriquecimiento diferencial
-
-## PCA
-
-```{r}
-# # Instalación de los paquetes necesarios
-# if (!requireNamespace("BiocManager", quietly = TRUE))
-#     install.packages("BiocManager")
-# 
-# BiocManager::install("clusterProfiler", force = T)
-# BiocManager::install("org.Hs.eg.db")
-# BiocManager::install("enrichplot")
-# 
-# # Cargar los paquetes
-# library(clusterProfiler)
-# library(org.Hs.eg.db)
-# library(enrichplot)
-# 
-# # Lista de genes
-# best50.loadings.pc1.pos <- rownames(data.frame(loading = head(sort(loading.pc1.pos, decreasing = TRUE), 50)))
-# best50.loadings.pc1.neg <- data.frame(loading =head(sort(loading.pc1.neg, decreasing = FALSE), 5))
-# best50.loadings.pc2.pos <- data.frame(loading =head(sort(loading.pc2.pos, decreasing = TRUE), 5))
-# best50.loadings.pc2.neg <- data.frame(loading =head(sort(loading.pc2.neg, decreasing = FALSE), 5))
-# 
-# # Preparar los datos de genes
-# gene_list <- bitr(best50.loadings.pc1.pos, fromType="ENTREZID", toType=c("ENSEMBL", "SYMBOL"), OrgDb="org.Hs.eg.db")
-# 
-# # Análisis de sobre-representación usando la base de datos KEGG
-# ego <- enrichGO(gene = best50.loadings.pc1.pos, 
-#                 OrgDb = "org.Hs.eg.db", 
-#                 keyType = "SYMBOL", 
-#                 ont = "ALL", 
-#                 pAdjustMethod = "BH", 
-#                 qvalueCutoff = 0.05, 
-#                 readable = TRUE)
-# 
-# barplot(ego, showCategory=10)
-# 
-# 
-# library(org.Hs.eg.db)
-# 
-# # Check if the top gene symbols are valid
-# valid_genes <- keys(org.Hs.eg.db, keytype = "SYMBOL")
-# head(valid_genes)
-# 
-# # Filter your gene list to include only valid genes
-# valid_gene_list <- best50.loadings.pc1.pos[best50.loadings.pc1.pos %in% valid_genes]
-# 
-# # If valid_gene_list is significantly shorter, it indicates many invalid gene symbols.
-# length(valid_gene_list)
-# 
-# sorted_valid_gene_list <- sort(best50.loadings.pc1.pos, decreasing = TRUE)
-# 
-# 
-# gse <- gseGO(geneList= sorted_valid_gene_list, 
-#              ont ="ALL", 
-#              keyType = "SYMBOL", 
-#              pvalueCutoff = 0.05, 
-#              verbose = TRUE, 
-#              OrgDb = "org.Hs.eg.db", 
-#              pAdjustMethod = "none")
-# 
-# 
-# require(DOSE)
-# ridgeplot(gse)
-
-```
-
 

@@ -124,27 +124,28 @@ The Memory and Aging Project (MAP) is a longitudinal, epidemiologic clinical-pat
 
     -   [x] Grafico ggnarstats
 
--   [ ] De los genes con más loadings en cada caso ver si existe la posibilidad de ver enriquecimiento diferencial
+-   [x] De los genes con más loadings en cada caso ver si existe la posibilidad de ver enriquecimiento diferencial
 
-    -   [ ] Ver gprofiler
-
-    -   [ ] Buscar otras herramientas
+    -   [x] Ver gprofiler
 
 -   [x] Ver overlap entre muestras outliers de PCA y otros métodos
 
--   [ ] Hacer upset plot
+-   [x] Hacer upset plot
 
-    -   [ ] Con todas las muestras
+    -   [x] Con todas las muestras
 
-    -   [ ] Solamente con enfermos
+    -   [x] Solamente con enfermos
+
+-   [x] Realizar análisis estadístico también con casos y sanos.
+
+-   [x] Pipeline caret de ranger para UMAP mUMAP1+ para sacar el varIMP
 
 ------------------------------------------------------------------------
 
 # Preguntas
 
--   [ ] Cuando hago el análisis estadístico es mejor hacerlo un grupo con el resto o un grupo con los "not in both". Por ejemplo mPC1 negative con mPC1 positivo + mPC2 positivo+mPC2 negativo+not in both, o mPC1 negative con solamente Not in both
-
--   [ ]
+-   [x] Cuando hago el análisis estadístico es mejor hacerlo un grupo con el resto o un grupo con los "not in both". Por ejemplo mPC1 negative con mPC1 positivo + mPC2 positivo+mPC2 negativo+not in both, o mPC1 negative con solamente Not in both
+-   [ ] Cuando hago el train del modelo de RF lo utilizo importance = "permutation" pero hay otra . Cual es mejor?
 
 ------------------------------------------------------------------------
 
@@ -367,3 +368,53 @@ para eso en lugar del plot de la 8.1. Yo añadiría también el conjunto de mues
 Está muy bien el ploteado de los tests nominalmente significativos, con cogdx.
 
 Ten paciencia, vamos a darle una vuelta más
+
+## Alicia 2024-05-15
+
+Hola,
+
+\- Respecto a los análisis estadísticos, normalmente usamos un umbral de significancia de 0.05. Además, en los únicos tests que parecen ser significativos (P\<0.05), la frecuencia mínima en esa comparativa es inferior a 1. Pongo aquí un ejemplo.
+
+En estos casos donde una de las frecuencias mínima es tan pequeña, no tengo claro que el test sea lo suficientemente informativo.
+
+\- Por otro lado, para hacer el enriquecimiento funcional, gprofiler2 es una de las herramientas más conocidas. Concretamente, con la función gost puedes obtener el enriquecimiento para diferentes conjuntos de genes:
+
+<https://rdrr.io/cran/gprofiler2/man/gost.html>
+
+Para ello, normalmente usamos como bases de datos GO, KEGG y REAC, aunque solo con GO sería suficiente en este caso (ver argumento sources). Además, si en la llamada a la función incluyes multi_query=T, te devuelve una comparativa del enriquecimiento entre los diferentes conjuntos de genes. Para representar el enriquecimiento te recomiendo un plot de este tipo. En nuestro caso, tendrías cuatro columnas (PC1+, PC1-, PC2+, PC2-). 
+
+![gprofiler2 -- an R package for gene list functional enrichment analysis and namespace conversion toolset g:Profiler. - Abstract - Europe PMC](https://europepmc.org/articles/PMC7859841/bin/f1000research-9-29655-g0003.jpg)
+
+La pregunta es ¿cuántos genes vas a coger de cada componente para hacer el enriquecimiento? Yo probaría diferentes tamaños, ya que si el conjunto de genes es muy pequeño puede ser que no haya enriquecimiento. Por ejemplo, cogería el top 10, 20, 30 de PC1+, PC1-, PC2+, PC2-.
+
+\- Respecto a tu pregunta sobre cómo extraer los genes más importantes del UMAP, dijimos que UMAP solo se iba a utilizar para visualizar los resultados y comparar los outliers, pero no para extraer los genes más importantes. 
+
+Saludos,
+
+Alicia.
+
+## Juan 2024-05-15
+
+Fer, esto cada vez tiene mejor pinta.
+
+Pero, y esto es una tontería, tienes que ser un poco más didáctico. Esto está creciendo mucho y no hay manera de navegar adecuadamente por el documento porque el índice no ayuda demasiado. ¿Cómo se puede saber por el índice flotante que estoy en la sección de SOLO CASOS o bien CASOS + CONTROLES?
+
+Con respecto a la interpretación de UMAP o TSNE, simplemente no puedes directamente. Esos métodos no son interpretables per se.
+
+De hecho, el mecanismo que estamos usando de detectar los outliers de UMAP cogiendo los valores más extremos a partir de cada eje no estoy seguro de que sea correcto, aunque funcione… De hecho, con UMAP lo que deberíamos es hacer un clustering y tratar cada grupo detectado por el clustering aunque esto es otra historia. Vamos a dejarlo así de momento. Si te fijas, la sección 7.3., el plot de UMAP está muy bien porque hay un cluster verde oliva uUMAP1 positive que es el que se lleva casi todas las señales (8 de 10). 
+
+Ahora bien, ¿cómo podemos interpretar las señales de manera indirecta aun estando en un UMAP para saber qué genes están generando esas señales?
+
+Fácil. Te quedas con los genes de Alzheimer que has obtenido en la sección 2. Y con todos los sujetos. Y con eso ya tienes la matriz de transcriptómica que necesitas (sujetos en las filas, genes en las columnas).
+
+Luego transformas la matriz en un dataset de clasificación binaria, tal que los sujetos detectados por UMAP pc1 positive, los etiquetas como “Outlier” en una columna nueva de la matriz, que llamas “Class” y al resto de individuos de la cohorte los etiquetas como “Normal”. Y con eso haces un random forest para predecir “Class”, y con varIMP obtienes las variables más importantes y esos serán tus genes : - ) Lo que yo haría sería usar la típica parrilla de parámetros de ranger, con kernel polinomial, mtry con una lista de valores usando como valor central la raíz cuadrada del número de genes de la sección 2, y dos valores más a la izquierda y a la derecha y que use para decidir el mejor modelo el accuracy balanceado (es un problema desbalanceado). Así tendrás los genes relevantes.
+
+¿Cómo lo ves?
+
+Después de esto, usando todos los genes del Alzheimer, hacemos un GSEA utilizando como mecanismo de importancia de cada gen la importancia de varIMP y esto te dará los genes MAS asociados a la covariable a partir de la cual se ha generado la señal. Si tenemos suerte, a parte de Alzheimer como señal que esa es evidente que tiene que salir, según te salga el enriquecimiento, por ejemplo, suponte que te sale un pathway relacionado con oxidación de lípidos como muy significativo. Estaría superchulo hacer la misma operación COMPLETA para los genes de ese pathway. Y mediante el mismo mecanismo llegar a que obtenemos, al final un enriquecimiento de genes de Alzheimer.  Es decir, el método sería robusto si a partir del Alzheimer llegamos a la oxidación de lípidos y si a partir de la oxidación de lípidos llegamos al Alzheimer. ¿OK?
+
+Pero básicamente, lo que haría ahora es (1) cerraría el markdown que estás trabajando añadiendo lo que te digo arriba de los títulos, y añadir en la sección 7.3 la pipeline caret de ranger, hasta llegar a varIMP. Y de ahí añadir en la sección 9, el análisis de enriquecimiento GSEA que haga uso de los valores de varIMP.
+
+Y luego, repetir TODO el Markdown cambiando en la sección 2 los genes de Alzheimer por los del pathway que te salga en la sección 9 del Markdown cerrado.
+
+¿Lo pillas?
