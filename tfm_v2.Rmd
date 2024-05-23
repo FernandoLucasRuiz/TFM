@@ -1637,10 +1637,15 @@ ggplot(para.plot, aes_string(x = "umap1", y = "umap2", color = "sampleset_UMAP")
   geom_point(data= (covs2 %>% filter(neuroStatus == 0)), aes_string(x = "umap1", y = "umap2", color = "sampleset_UMAP"), alpha = 0.5) 
 ```
 
-### Seleccion genes importantes para mUMAP1+
+### Seleccion genes importantes 
 
 ```{r}
-# outliers mUMAP1+
+save(umap.ad, covs2, covs2.casos, mat_exp_alz_genes, mUMAP1.pos, outliers.umap1, outliers.umap2, file = "mi_entorno_EnrDif.RData")
+```
+
+#### mUMAP1+
+
+```{r}
 # Crear un vector con todos los individuos etiquetados como "Sano"
 estado <- rep(0, nrow(mat_exp_alz_genes))
 
@@ -1668,7 +1673,7 @@ modelLookup("ranger")
 
 Aquí he utilizado el parámetro importance = "permutation"
 
-```{r, eval=FALSE}
+```{r}
 # Definir una función para calcular la Accuracy balanceada
 balanced_accuracy <- function(data, lev = NULL, model = NULL) {
   cm <- confusionMatrix(data$pred, data$obs)
@@ -1709,11 +1714,9 @@ for (tree in trees){ # bucle en cada pasada hace un modelo con un número de arb
   )
   rf.cv.10[[paste(tree, "trees")]] <- modelo # metemos el modelo en la lista
 }
-saveRDS(rf.cv.10, "rf.cv.10.RDS")
 ```
 
 ```{r}
-rf.cv.10 <- readRDS("rf.cv.10.RDS")
 
 # Hacemos dataframe con las métricas de cada modelo
 datos_combinados <- rbind(
@@ -1722,6 +1725,8 @@ datos_combinados <- rbind(
   data.frame(mtry = rf.cv.10$`1500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1500 trees`$results$BalancedAccuracy, Trees = "1500 trees", Metric = "Balanced Accuracy"),
   data.frame(mtry = rf.cv.10$`2000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`2000 trees`$results$BalancedAccuracy, Trees = "2000 trees", Metric = "Balanced Accuracy")
 )
+
+datos_combinados$Trees <- factor(datos_combinados$Trees, levels = c("500 trees", "1000 trees", "1500 trees", "2000 trees"))
 
 datos_combinados %>%
   # filter(splitrule == "extratrees") %>%
@@ -1740,54 +1745,387 @@ models <- resamples(rf.cv.10)
 summary(models)
 ```
 
-
 ```{r}
-important.genes <- varImp(rf.cv.10$`500 trees`)$importance %>% 
+important.genes.umap1pos <- varImp(rf.cv.10$`500 trees`)$importance %>% 
   rownames_to_column() %>%
   arrange(desc(Overall))
 
-important.genes %>%
+important.genes.umap1pos %>%
   head(50) %>%
   mutate(row_index = row_number(),  # Crear una columna numérica para el índice
          rowname = forcats::fct_inorder(rowname)) %>%
   ggplot(aes(x = row_index, y = Overall)) +  # Usar row_index en el eje X
     geom_point() +
     geom_line() +
-    labs(x = "Número Genes", title = "Importancia genes en RF") +
+    labs(x = "Número Genes", title = "Importancia genes UMAP1+ en RF") +
     theme_bw() +
     theme(axis.text.x = element_text(size = 10))
 
 ```
 
+#### mUMAP1-
+
+```{r}
+# Crear un vector con todos los individuos etiquetados como "Sano"
+estado <- rep(0, nrow(mat_exp_alz_genes))
+
+# Reemplazar "Sano" con "Enfermo" para los individuos en la lista de enfermos
+estado[rownames(mat_exp_alz_genes) %in% mUMAP1.neg] <- 1
+
+# Añadir la nueva columna a la matriz de expresión de genes
+mat_exp_alz_genes.RF <- data.frame(cbind(mat_exp_alz_genes, class = estado))
+
+mat_exp_alz_genes.RF$class <- as.factor(mat_exp_alz_genes.RF$class)
+
+```
+
+Aquí he utilizado el parámetro importance = "permutation"
+
+```{r}
+# Definir una función para calcular la Accuracy balanceada
+balanced_accuracy <- function(data, lev = NULL, model = NULL) {
+  cm <- confusionMatrix(data$pred, data$obs)
+  sensitivity <- cm$byClass["Sensitivity"]
+  specificity <- cm$byClass["Specificity"]
+  balanced_acc <- mean(c(sensitivity, specificity))
+  c(BalancedAccuracy = balanced_acc)
+}
+
+# Definir las métricas de evaluación que queremos utilizar
+RFControl <- trainControl(
+  method = "cv", 
+  number = 10,
+  repeats = 10,
+  summaryFunction = balanced_accuracy,
+  allowParallel = TRUE,
+  seeds = NULL, 
+  returnResamp = "final",
+)
+
+set.seed(1234)
+sqr.genes <- round(sqrt(ncol(mat_exp_alz_genes.RF)))
+
+mygrid <- expand.grid(mtry = c(sqr.genes - 2, sqr.genes - 1, sqr.genes, sqr.genes+1, sqr.genes+2),
+                      splitrule = c("gini", "extratrees"),
+                      min.node.size = 1)
+trees <- seq(500, 2000, 500) 
+
+rf.cv.10 <- list() # lista vacia para meter los resultados de cada bucle
+for (tree in trees){ # bucle en cada pasada hace un modelo con un número de arboles distintos
+  modelo <- train(class ~., data=mat_exp_alz_genes.RF,
+                  method="ranger",
+                  tuneGrid=mygrid,
+                  trControl=RFControl, 
+                  ntree = tree,
+                  metric = "BalancedAccuracy",
+                  importance = "permutation" # o impurity permutation https://arxiv.org/abs/1407.7502
+  )
+  rf.cv.10[[paste(tree, "trees")]] <- modelo # metemos el modelo en la lista
+}
+```
+
+```{r}
+# Hacemos dataframe con las métricas de cada modelo
+datos_combinados <- rbind(
+  data.frame(mtry = rf.cv.10$`500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`500 trees`$results$BalancedAccuracy, Trees = "500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1000 trees`$results$BalancedAccuracy, Trees = "1000 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1500 trees`$results$BalancedAccuracy, Trees = "1500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`2000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`2000 trees`$results$BalancedAccuracy, Trees = "2000 trees", Metric = "Balanced Accuracy")
+)
+
+datos_combinados$Trees <- factor(datos_combinados$Trees, levels = c("500 trees", "1000 trees", "1500 trees", "2000 trees"))
+
+datos_combinados %>%
+  # filter(splitrule == "extratrees") %>%
+  filter(Metric == "Balanced Accuracy") %>%
+  ggplot(aes(x = mtry, y = MetricValue, color = Trees)) +
+  geom_point(size = 4) +
+  geom_line(linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Mtry", y = "Valor de la Métrica", title = "Comparación de Balanced Accuracy con splitrule") +
+  facet_wrap(~ splitrule) 
+```
+
+```{r}
+models <- resamples(rf.cv.10)
+
+summary(models)
+```
+
+```{r}
+important.genes.umap1neg <- varImp(rf.cv.10$`500 trees`)$importance %>% 
+  rownames_to_column() %>%
+  arrange(desc(Overall))
+
+important.genes.umap1neg %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  # Crear una columna numérica para el índice
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = Overall)) +  # Usar row_index en el eje X
+    geom_point() +
+    geom_line() +
+    labs(x = "Número Genes", title = "Importancia genes UMAP1- en RF") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 10))
+
+```
+
+
+#### mUMAP2+
+
+```{r}
+# Crear un vector con todos los individuos etiquetados como "Sano"
+estado <- rep(0, nrow(mat_exp_alz_genes))
+
+# Reemplazar "Sano" con "Enfermo" para los individuos en la lista de enfermos
+estado[rownames(mat_exp_alz_genes) %in% mUMAP2.pos] <- 1
+
+# Añadir la nueva columna a la matriz de expresión de genes
+mat_exp_alz_genes.RF <- data.frame(cbind(mat_exp_alz_genes, class = estado))
+
+mat_exp_alz_genes.RF$class <- as.factor(mat_exp_alz_genes.RF$class)
+
+```
+
+Aquí he utilizado el parámetro importance = "permutation"
+
+```{r}
+# Definir una función para calcular la Accuracy balanceada
+balanced_accuracy <- function(data, lev = NULL, model = NULL) {
+  cm <- confusionMatrix(data$pred, data$obs)
+  sensitivity <- cm$byClass["Sensitivity"]
+  specificity <- cm$byClass["Specificity"]
+  balanced_acc <- mean(c(sensitivity, specificity))
+  c(BalancedAccuracy = balanced_acc)
+}
+
+# Definir las métricas de evaluación que queremos utilizar
+RFControl <- trainControl(
+  method = "cv", 
+  number = 10,
+  repeats = 10,
+  summaryFunction = balanced_accuracy,
+  allowParallel = TRUE,
+  seeds = NULL, 
+  returnResamp = "final",
+)
+
+set.seed(1234)
+sqr.genes <- round(sqrt(ncol(mat_exp_alz_genes.RF)))
+
+mygrid <- expand.grid(mtry = c(sqr.genes - 2, sqr.genes - 1, sqr.genes, sqr.genes+1, sqr.genes+2),
+                      splitrule = c("gini", "extratrees"),
+                      min.node.size = 1)
+trees <- seq(500, 2000, 500) 
+
+rf.cv.10 <- list() # lista vacia para meter los resultados de cada bucle
+for (tree in trees){ # bucle en cada pasada hace un modelo con un número de arboles distintos
+  modelo <- train(class ~., data=mat_exp_alz_genes.RF,
+                  method="ranger",
+                  tuneGrid=mygrid,
+                  trControl=RFControl, 
+                  ntree = tree,
+                  metric = "BalancedAccuracy",
+                  importance = "permutation" # o impurity permutation https://arxiv.org/abs/1407.7502
+  )
+  rf.cv.10[[paste(tree, "trees")]] <- modelo # metemos el modelo en la lista
+}
+```
+
+```{r}
+# Hacemos dataframe con las métricas de cada modelo
+datos_combinados <- rbind(
+  data.frame(mtry = rf.cv.10$`500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`500 trees`$results$BalancedAccuracy, Trees = "500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1000 trees`$results$BalancedAccuracy, Trees = "1000 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1500 trees`$results$BalancedAccuracy, Trees = "1500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`2000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`2000 trees`$results$BalancedAccuracy, Trees = "2000 trees", Metric = "Balanced Accuracy")
+)
+
+datos_combinados$Trees <- factor(datos_combinados$Trees, levels = c("500 trees", "1000 trees", "1500 trees", "2000 trees"))
+
+datos_combinados %>%
+  # filter(splitrule == "extratrees") %>%
+  filter(Metric == "Balanced Accuracy") %>%
+  ggplot(aes(x = mtry, y = MetricValue, color = Trees)) +
+  geom_point(size = 4) +
+  geom_line(linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Mtry", y = "Valor de la Métrica", title = "Comparación de Balanced Accuracy con splitrule") +
+  facet_wrap(~ splitrule) 
+```
+
+```{r}
+models <- resamples(rf.cv.10)
+
+summary(models)
+```
+
+```{r}
+important.genes.umap2pos <- varImp(rf.cv.10$`2000 trees`)$importance %>% 
+  rownames_to_column() %>%
+  arrange(desc(Overall))
+
+important.genes.umap2pos %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  # Crear una columna numérica para el índice
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = Overall)) +  # Usar row_index en el eje X
+    geom_point() +
+    geom_line() +
+    labs(x = "Número Genes", title = "Importancia genes UMAP1- en RF") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 10))
+
+```
+
+
+#### mUMAP2-
+
+```{r}
+# Crear un vector con todos los individuos etiquetados como "Sano"
+estado <- rep(0, nrow(mat_exp_alz_genes))
+
+# Reemplazar "Sano" con "Enfermo" para los individuos en la lista de enfermos
+estado[rownames(mat_exp_alz_genes) %in% mUMAP2.neg] <- 1
+
+# Añadir la nueva columna a la matriz de expresión de genes
+mat_exp_alz_genes.RF <- data.frame(cbind(mat_exp_alz_genes, class = estado))
+
+mat_exp_alz_genes.RF$class <- as.factor(mat_exp_alz_genes.RF$class)
+
+```
+
+Aquí he utilizado el parámetro importance = "permutation"
+
+```{r}
+# Definir una función para calcular la Accuracy balanceada
+balanced_accuracy <- function(data, lev = NULL, model = NULL) {
+  cm <- confusionMatrix(data$pred, data$obs)
+  sensitivity <- cm$byClass["Sensitivity"]
+  specificity <- cm$byClass["Specificity"]
+  balanced_acc <- mean(c(sensitivity, specificity))
+  c(BalancedAccuracy = balanced_acc)
+}
+
+# Definir las métricas de evaluación que queremos utilizar
+RFControl <- trainControl(
+  method = "cv", 
+  number = 10,
+  repeats = 10,
+  summaryFunction = balanced_accuracy,
+  allowParallel = TRUE,
+  seeds = NULL, 
+  returnResamp = "final",
+)
+
+set.seed(1234)
+sqr.genes <- round(sqrt(ncol(mat_exp_alz_genes.RF)))
+
+mygrid <- expand.grid(mtry = c(sqr.genes - 2, sqr.genes - 1, sqr.genes, sqr.genes+1, sqr.genes+2),
+                      splitrule = c("gini", "extratrees"),
+                      min.node.size = 1)
+trees <- seq(500, 2000, 500) 
+
+rf.cv.10 <- list() # lista vacia para meter los resultados de cada bucle
+for (tree in trees){ # bucle en cada pasada hace un modelo con un número de arboles distintos
+  modelo <- train(class ~., data=mat_exp_alz_genes.RF,
+                  method="ranger",
+                  tuneGrid=mygrid,
+                  trControl=RFControl, 
+                  ntree = tree,
+                  metric = "BalancedAccuracy",
+                  importance = "permutation" # o impurity permutation https://arxiv.org/abs/1407.7502
+  )
+  rf.cv.10[[paste(tree, "trees")]] <- modelo # metemos el modelo en la lista
+}
+```
+
+```{r}
+# Hacemos dataframe con las métricas de cada modelo
+datos_combinados <- rbind(
+  data.frame(mtry = rf.cv.10$`500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`500 trees`$results$BalancedAccuracy, Trees = "500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1000 trees`$results$BalancedAccuracy, Trees = "1000 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1500 trees`$results$BalancedAccuracy, Trees = "1500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`2000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`2000 trees`$results$BalancedAccuracy, Trees = "2000 trees", Metric = "Balanced Accuracy")
+)
+
+datos_combinados$Trees <- factor(datos_combinados$Trees, levels = c("500 trees", "1000 trees", "1500 trees", "2000 trees"))
+
+datos_combinados %>%
+  # filter(splitrule == "extratrees") %>%
+  filter(Metric == "Balanced Accuracy") %>%
+  ggplot(aes(x = mtry, y = MetricValue, color = Trees)) +
+  geom_point(size = 4) +
+  geom_line(linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Mtry", y = "Valor de la Métrica", title = "Comparación de Balanced Accuracy con splitrule") +
+  facet_wrap(~ splitrule) 
+```
+
+```{r}
+models <- resamples(rf.cv.10)
+
+summary(models)
+```
+
+```{r}
+important.genes.umap2neg <- varImp(rf.cv.10$`500 trees`)$importance %>% 
+  rownames_to_column() %>%
+  arrange(desc(Overall))
+
+important.genes.umap2neg %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  # Crear una columna numérica para el índice
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = Overall)) +  # Usar row_index en el eje X
+    geom_point() +
+    geom_line() +
+    labs(x = "Número Genes", title = "Importancia genes UMAP1- en RF") +
+    theme_bw() +
+    theme(axis.text.x = element_text(size = 10))
+
+```
 ### Enriquecimiento 
 
 #### GO
 
 ```{r}
-important.genes.top <- important.genes %>%
-  head(., 30) 
-
-top_genes <- important.genes.top$rowname
-
-gp_up_ordered = gost(top_genes, organism = "hsapiens",
-		        #ordered_query = TRUE, 
-		        sources = "GO", 
-		        highlight = T)
-
-gostplot(gp_up_ordered, interactive = T, capped = F)
+saveRDS(important.genes.umap1pos, "important.genes.umap1pos.RDS")
 ```
 
 ```{r}
-top_genes.gprofiler = gconvert(top_genes)
+important.genes.top <- important.genes.umap1pos%>%
+  head(., 30) 
 
+matriz.AD.minus.important.genes <- mat_exp_alz_genes[!colnames(mat_exp_alz_genes) %in% important.genes.top$rowname, ]
+
+top_genes <- important.genes.top$rowname
+
+gp_up_ordered = gost(list("Specific UMAP1+ genes" = important.genes.top$rowname, 
+                          "Matriz genes" = colnames(matriz.AD.minus.important.genes)) , 
+                     organism = "hsapiens",
+                     sources = "GO", 
+                     multi_query = T,
+                     highlight = T)
+
+gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r}
+top_genes_umap1pos.gprofiler = gconvert(important.genes.top$rowname)
+top_genes_matriz.gprofiler = gconvert(colnames(matriz.AD.minus.important.genes))
 
 # enrichment analysis using gene names
-multi_gp = gost(top_genes.gprofiler$name, 
+multi_gp = gost(list("Specific UMAP1+ genes" = top_genes_umap1pos.gprofiler$name,
+                     "Matriz genes" = top_genes_matriz.gprofiler$name), 
           multi_query = FALSE, 
           evcodes = TRUE, 
           sources = "GO", 
           highlight = T)
 
+multi_gp$result <- multi_gp$result %>%
+  filter(highlighted == T)
+
 # modify the g:Profiler data frame
 gp_mod = multi_gp$result[,c("query", "source", "term_id",
                                 "term_name", "p_value", "query_size", 
@@ -1800,34 +2138,39 @@ names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust",
                     "geneID", "GeneRatio", "BgRatio")
 gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
 
-#quitar los duplicados
-duplicados <- gp_mod$ID[duplicated(gp_mod$ID) | duplicated(gp_mod$ID, fromLast = TRUE)]
-gp_mod_unicos <- gp_mod[!(gp_mod$ID %in% duplicados), ]
-
-row.names(gp_mod_unicos) <- gp_mod_unicos$ID
-
 # define as enrichResult object
-gp_mod_enrich  = new("enrichResult", result = gp_mod_unicos)
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
 
-enrichplot::dotplot(gp_mod_enrich)
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size) %>%
+  arrange(desc(Cluster)) 
+
+enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "GeneRatio")
 ```
 
 #### KEGG
 
 ```{r}
-gp_up_ordered = gost(top_genes, organism = "hsapiens",
-		        ordered_query = TRUE, sources = "KEGG")
+gp_up_ordered = gost(list("Specific UMAP1+ genes" = important.genes.top$rowname, 
+                          "Matriz genes" = colnames(matriz.AD.minus.important.genes)) , 
+                     organism = "hsapiens",
+                     sources = "KEGG", 
+                     multi_query = T,
+                     highlight = T)
 
-gostplot(gp_up_ordered, interactive = T)
+gostplot(gp_up_ordered, interactive = T, capped = T)
 ```
 
-```{r, fig.height=8}
-top_genes.gprofiler = gconvert(top_genes)
-
+```{r}
+top_genes_umap1pos.gprofiler = gconvert(important.genes.top$rowname)
+top_genes_matriz.gprofiler = gconvert(colnames(matriz.AD.minus.important.genes))
 
 # enrichment analysis using gene names
-multi_gp = gost(top_genes.gprofiler$name, 
-          multi_query = FALSE, evcodes = TRUE, sources = "KEGG")
+multi_gp = gost(list("Specific UMAP1+ genes" = top_genes_umap1pos.gprofiler$name,
+                     "Matriz genes" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "KEGG")
 
 # modify the g:Profiler data frame
 gp_mod = multi_gp$result[,c("query", "source", "term_id",
@@ -1841,34 +2184,39 @@ names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust",
                     "geneID", "GeneRatio", "BgRatio")
 gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
 
-#quitar los duplicados
-duplicados <- gp_mod$ID[duplicated(gp_mod$ID) | duplicated(gp_mod$ID, fromLast = TRUE)]
-gp_mod_unicos <- gp_mod[!(gp_mod$ID %in% duplicados), ]
-
-row.names(gp_mod_unicos) <- gp_mod_unicos$ID
-
 # define as enrichResult object
-gp_mod_enrich  = new("enrichResult", result = gp_mod_unicos)
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
 
-enrichplot::dotplot(gp_mod_enrich, showCategory = 20)
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size) %>%
+  arrange(desc(generationumerico)) 
+
+enrichplot::dotplot(gp_mod_enrich, showCategory = 30, x = "Cluster", size = "GeneRatio")
 ```
 
 #### REAC
 
 ```{r}
-gp_up_ordered = gost(top_genes, organism = "hsapiens",
-		        ordered_query = TRUE, sources = "REAC")
+gp_up_ordered = gost(list("Specific UMAP1+ genes" = important.genes.top$rowname, 
+                          "Matriz genes" = colnames(matriz.AD.minus.important.genes)) , 
+                     organism = "hsapiens",
+                     sources = "REAC", 
+                     multi_query = T,
+                     highlight = T)
 
 gostplot(gp_up_ordered, interactive = T, capped = F)
 ```
 
-```{r, fig.height=8}
-top_genes.gprofiler = gconvert(top_genes)
-
+```{r}
+top_genes_umap1pos.gprofiler = gconvert(important.genes.top$rowname)
+top_genes_matriz.gprofiler = gconvert(colnames(matriz.AD.minus.important.genes))
 
 # enrichment analysis using gene names
-multi_gp = gost(top_genes.gprofiler$name, 
-          multi_query = FALSE, evcodes = TRUE, sources = "REAC")
+multi_gp = gost(list("Specific UMAP1+ genes" = top_genes_umap1pos.gprofiler$name,
+                     "Matriz genes" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "REAC")
 
 # modify the g:Profiler data frame
 gp_mod = multi_gp$result[,c("query", "source", "term_id",
@@ -1882,16 +2230,14 @@ names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust",
                     "geneID", "GeneRatio", "BgRatio")
 gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
 
-#quitar los duplicados
-duplicados <- gp_mod$ID[duplicated(gp_mod$ID) | duplicated(gp_mod$ID, fromLast = TRUE)]
-gp_mod_unicos <- gp_mod[!(gp_mod$ID %in% duplicados), ]
-
-row.names(gp_mod_unicos) <- gp_mod_unicos$ID
-
 # define as enrichResult object
-gp_mod_enrich  = new("enrichResult", result = gp_mod_unicos)
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
 
-enrichplot::dotplot(gp_mod_enrich, showCategory = 10)
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size) %>%
+  arrange(desc(Cluster)) 
+
+enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "GeneRatio")
 ```
 
 
@@ -2121,4 +2467,6 @@ reactable(covs2 %>%
   filter(sampleset_PCA != "Not in both" & sampleset_tSNE != "Not in both" & sampleset_UMAP != "Not in both")
 )
 ```
+
+
 

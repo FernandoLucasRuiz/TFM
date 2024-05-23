@@ -418,3 +418,21 @@ Pero básicamente, lo que haría ahora es (1) cerraría el markdown que estás t
 Y luego, repetir TODO el Markdown cambiando en la sección 2 los genes de Alzheimer por los del pathway que te salga en la sección 9 del Markdown cerrado.
 
 ¿Lo pillas?
+
+## Juan 2024-05-17
+
+Hola…
+
+Esto ya es muchísima información y vamos a tener que intentar resumir.
+
+Ahora empieza lo bueno.
+
+Efectivamente, necesitamos un análisis de enriquecimiento diferencial.
+
+Pero con respecto a los dotplots en los que comparas los cuatro clusters PC+-12, en lugar de eso, yo haría cuatro plots.
+
+En cada plot compararía el enriquecimiento obtenido por el correspondiente PC versus los genes del geneset inicial (Alzheimer) menos los genes de PC. Y así veríamos qué términos son exclusivos. ¿No es cierto?
+
+Céntrate solo en UMAP. Cuando generes esos cuatro dotplots en lugar de uno podremos elegir. 
+
+¿OK?
