@@ -1,5 +1,7 @@
 # SELECCIÓN DE SUJETOS DE INTERÉS EN COHORTES CLÍNICAS CON ÓMICA PARA APLICACIÓN TRASLACIONAL
 
+## Trabajo Fin de Máster de Bioinformática de la Universidad de Murcia
+
 La enfermedad de Alzheimer (EA) es un trastorno neurodegenerativo progresivo y la causa más común de demencia en adultos mayores. Existe una considerable heterogeneidad en la EA y la bioinformática y las técnicas de Machine Learning han permitido identificar subtipos clínicos basados en datos de neuroimagen, evaluaciones cognitivas y biomarcadores. Para manejar la complejidad de los datos ómicos, se utilizan técnicas de reducción de dimensionalida. Estas técnicas transforman los datos en un espacio de menor dimensionalidad, facilitando la detección muestras extremas.
 
 El objetivo principal es crear una herramienta para detectar muestras extremas en base a la transcriptómica de una enfermedad compleja como la EA. Los objetivos específicos incluyen implementar la herramienta para caracterizar las muestras extremas en base a información clínica y demográfica, y caracterizar funcionalmente los genes relevantes.
