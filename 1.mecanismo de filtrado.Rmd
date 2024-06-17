@@ -1,0 +1,119 @@
+---
+title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
+subtitle: "Mecanismo de filtrado"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+# Leyendo datos
+
+Descargar los datos. Escalo los datos de la matriz para tener homogeneidad en las representaciones.
+
+```{r}
+# covariables
+ROSMAP_RINPMIAGESEX_covs <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_covs.rds")
+covs <- ROSMAP_RINPMIAGESEX_covs
+rownames(covs) <- covs$mrna_id
+covs$study <- as.factor(covs$study)
+covs$projid <- as.character(covs$projid)
+covs$ceradsc <- as.factor(covs$ceradsc)
+covs$cogdx <- as.factor(covs$cogdx)
+covs$neuroStatus <- as.factor(covs$neuroStatus)
+
+#datos corregidos 
+ROSMAP_RINPMIAGESEX_resids <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_resids.rds")
+mat_exp <- scale(ROSMAP_RINPMIAGESEX_resids)
+```
+
+One-hot encoding de la matriz de covariables
+
+```{r}
+covs2 <- data.frame(matrix(ncol = 0, nrow = nrow(covs))) # Hago un dataframe vacio para meter los datos procesados
+
+for (colname in names(covs)) {
+  if (is.factor(covs[[colname]]) & length(levels(covs[[colname]])) > 2) {
+
+    dummy_df <- dummy_cols(covs[colname], 
+                           remove_selected_columns = TRUE) # quitar las variables iniciales
+    
+    dummy_df <- data.frame(lapply(dummy_df, factor))
+
+    covs2 <- cbind(covs2, dummy_df)
+
+  } else {
+
+    covs2[[colname]] <- covs[[colname]] # si son numéricas o categóricas binarias, las añadimos igual
+  }
+}
+rownames(covs2) <- covs2$mrna_id
+```
+
+# Cargando geneset
+
+```{r}
+# geneset de Alzheimer extraidos de KEGG
+tab <- getGeneKEGGLinks(species="hsa")
+tab$Symbol <- mapIds(org.Hs.eg.db, tab$GeneID,
+                       column="SYMBOL", keytype="ENTREZID")
+
+paths <- getKEGGPathwayNames(species="hsa")
+geneset_alz <- tab$Symbol[tab$PathwayID=="hsa05010"]
+```
+
+
+# Mecanismos de filtrado
+
+Filtrar la matriz Mnxm a Mnxm’, con m’ << n para filtrar los predictores, en este caso de la matriz de expresión mat_exp. 
+
+```{r}
+mat_exp_alz_genes <- mat_exp[, colnames(mat_exp) %in% geneset_alz]
+```
+
+```{r, fig.height=4, fig.width=6}
+venn.plot <- venn.diagram(
+  x = list(GenesMatriz = colnames(mat_exp), GenesetAlzheimer = geneset_alz),
+  category.names = c("Genes matriz transcriptómica", "Geneset EA\n KEGG"),
+  filename = NULL,
+  output = FALSE,  # Asegura que no se exporte a un archivo
+  fill = c("#21908CFF", '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = c(0, 20), #posicion de las categoricas
+  cat.dist = c(0.05, 0.1), #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  # main = "Nº de genes en matriz transcriptómica\n vs\n Nº de genes en geneset EA KEGG",
+  # main.fontface= "bold", 
+  # main.cex = 1.2,
+  # main.pos = c(0.5, 1)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+```{r}
+save.image("mecanismo de filtrado.RData")
+```
+

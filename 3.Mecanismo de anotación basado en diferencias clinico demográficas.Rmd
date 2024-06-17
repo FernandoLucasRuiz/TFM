@@ -1,0 +1,373 @@
+---
+title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
+subtitle: "Mecanismo de anotación basado en diferencias clinico demográficas"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+# Cargar los datos del mecanismo de deteccion de outliers
+
+```{r}
+load("mecanismo de deteccion de outliers.RData")
+```
+
+# Mecanismo de anotación basado en diferencias 
+
+## Covariables en outliers 
+
+Tabla frecuencia outliers SANOS Y ENFERMOS con PCA
+
+```{r}
+# PCA
+
+for (i in rownames(covs2)){
+  if (i %in% mPC1.pos){
+    covs2[i, "sampleset_PCA"] <- "mPC1 positivo"
+  }
+  else if (i %in% mPC1.neg){
+    covs2[i, "sampleset_PCA"] <- "mPC1 negativo"
+  }
+  else if (i %in% mPC2.pos ){
+    covs2[i, "sampleset_PCA"] <- "mPC2 positivo"
+  }
+  else if (i %in% mPC2.neg){
+    covs2[i, "sampleset_PCA"] <- "mPC2 negativo"
+  }
+  else {
+    covs2[i, "sampleset_PCA"] <- "No outiler"
+  }
+}
+
+covs2$sampleset_PCA <- as.factor(covs2$sampleset_PCA)
+data.frame(table(covs2$sampleset_PCA))
+
+```
+
+Tabla frecuencia outliers SOLAMENTE ENFERMOS con PCA
+
+```{r}
+data.frame(table(covs2$sampleset_PCA[covs2$neuroStatus == 1]))
+```
+
+
+Tabla frecuencia outliers SANOS Y ENFERMOS con tSNE
+```{r}
+#tsne
+
+for (i in rownames(covs2)){
+  if (i %in% mtSNE1.pos){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE1 positivo"
+  }
+  else if (i %in% mtSNE1.neg){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE1 negativo"
+  }
+  else if (i %in% mtSNE2.pos){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE2 positivo"
+  }
+  else if (i %in% mtSNE2.neg){
+    covs2[i, "sampleset_tSNE"] <- "mtSNE2 negativo"
+  } else {
+    covs2[i, "sampleset_tSNE"] <- "No outiler"
+  }
+}
+
+covs2$sampleset_tSNE <- as.factor(covs2$sampleset_tSNE)
+data.frame(table(covs2$sampleset_tSNE))
+```
+
+Tabla frecuencia outliers SOLAMENTE ENFERMOS con tSNE
+```{r}
+data.frame(table(covs2$sampleset_tSNE[covs2$neuroStatus == 1]))
+```
+
+Tabla frecuencia outliers SANOS Y ENFERMOS con UMAP
+```{r}
+# UMAP
+
+for (i in rownames(covs2)){
+  if (i %in% mUMAP1.pos){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP1 positivo"
+  }
+  else if (i %in% mUMAP1.neg){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP1 negativo"
+  }
+  else if (i %in% mUMAP2.pos){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP2 positivo"
+  }
+  else if (i %in% mUMAP2.neg){
+    covs2[i, "sampleset_UMAP"] <- "mUMAP2 negativo"
+  } else {
+    covs2[i, "sampleset_UMAP"] <- "No outiler"
+  }
+}
+
+covs2$sampleset_UMAP <- as.factor(covs2$sampleset_UMAP)
+data.frame(table(covs2$sampleset_UMAP))
+```
+Tabla frecuencia outliers SOLAMENTE ENFERMOS con UMAP
+```{r}
+data.frame(table(covs2$sampleset_UMAP[covs2$neuroStatus == 1]))
+```
+
+```{r}
+covs2 %>%
+  dplyr::select(neuroStatus, sampleset_UMAP) %>%
+  mutate(outlier = ifelse(sampleset_UMAP == "No outiler", "No outlier", "outlier")) %>%
+  count(neuroStatus, outlier) %>%
+  mutate(prop = n / sum(n)) %>%
+  ggplot(aes(x = 2, y = prop, fill = interaction(neuroStatus, outlier))) +
+    geom_bar(stat = "identity", width = 1, color = "white") +
+    coord_polar(theta = "y") +
+    xlim(0.5, 2.5) +
+    theme_void() +
+    theme(legend.title = element_blank()) +
+    labs(title = "Distribución de neuroStatus y outliers") +
+    geom_text(aes(label = scales::percent(prop)),
+              position = position_stack(vjust = 0.5))
+
+
+```
+
+## Fitrado de casos 
+
+```{r}
+covs2.casos <- covs2 %>%
+  filter(neuroStatus == 1)
+reactable(covs2.casos)
+```
+
+
+## UMAP
+
+### CASOS
+
+#### Test estadistico
+
+```{r}
+calculo.test <- function(df.covs, sampleset){
+  
+  resultados <- data.frame(
+    "Covariable" = character(0), 
+    "Principal component" = character(0),
+    "Minimun expected frequency" = character(0),
+    "test" = character(0),
+    "p-value" = numeric(0),
+    "test 2" = character(0),
+    "p-value 2" = numeric(0),
+    "Real_mPC_0" = numeric(0),
+    "Expected_mPC_0" = numeric(0),
+    "Real_mPC_1" = numeric(0),
+    "Expected_mPC_1" = numeric(0),
+    "Real_NOT_mPC_0" = numeric(0),
+    "Expected_NOT_mPC_0" = numeric(0),
+    "Real_NOT_mPC_1" = numeric(0),
+    "Expected_NOT mPC_1" = numeric(0),
+    stringsAsFactors = FALSE
+  )
+  
+  for (i in names(df.covs)) {
+    
+    if (i == "neuroStatus") {
+      next
+      
+    }
+    if (class(df.covs[[i]]) == "factor") {
+      
+      if (grepl("sampleset_", i) | grepl("batch", i)){
+        next
+        
+      } else {
+        
+        for (j in levels(df.covs[[sampleset]])) {
+          
+          if (j == "No outiler") {
+            next
+            
+          } else {
+            df <- df.covs %>%
+              mutate(modified.class = ifelse(!!sym(sampleset) == j, j, paste("Not", j))) %>%
+              dplyr::select(all_of(i), modified.class) %>%
+              mutate(class = factor(modified.class, levels = c(j, paste("Not", j))))
+            
+            frecuencia <- table(df[[i]], df[["class"]])
+            
+            rownames(frecuencia) <- c(paste(i, rownames(frecuencia), sep = "_"))
+            
+            expected <- chisq.test(frecuencia)$expected
+            
+            if (any(expected <= 5)) {
+              # Obtener la posición del valor mínimo
+              posicion_minimo <- which(frecuencia == min(frecuencia), arr.ind = TRUE)
+              nombres.columnas <- colnames(frecuencia)
+              nombres.filas <- rownames(frecuencia)
+              
+              test <- fisher.test(frecuencia)
+              test.utilizado <- "Fisher's exact test"
+              
+              test2 <- chisq.test(frecuencia, correct = TRUE)
+              test2.utilizado <- "Chi-Square test with Yate's correction"
+              
+            } else {
+              test <- chisq.test(frecuencia, correct = TRUE)
+              test.utilizado <- "Chi-Square test with Yate's correction"
+              
+              test2 <- chisq.test(matrix(c(1,1,1,1), nrow = 2))
+              test2.utilizado <- "N/A"
+            }
+            
+            nuevafila <- data.frame(
+              "Covariable" = i,
+              "Principal component" = j,
+              "Minimun expected frequency" = round(min(expected), 2),
+              "test" = test.utilizado,
+              "p-value" = round(test$p.value, 3),
+              "test 2" = test2.utilizado,
+              "p-value 2" = ifelse(test2.utilizado == "N/A", NA, round(test2$p.value, 3)),
+              "Real_mPC_0" = round(frecuencia[1,1], 2),
+              "Expected_mPC_0" = round(expected[1,1], 2),
+              "Real_mPC_1" = round(frecuencia[2,1], 2),
+              "Expected_mPC_1" = round(expected[2,1], 2),
+              "Real_NOT_mPC_0" = round(frecuencia[1,2], 2),
+              "Expected_NOT_mPC_0" = round(expected[1,2], 2),
+              "Real_NOT_mPC_1" = round(frecuencia[2,2], 2),
+              "Expected_NOT mPC_1" = round(expected[2,2], 2),
+              stringsAsFactors = FALSE
+            )
+            
+            resultados <- rbind(resultados, nuevafila)
+          }
+        }
+      } 
+    } 
+  } 
+  
+  return(resultados)
+}
+```
+
+Calculo test estadistico
+
+```{r,warning=FALSE}
+reactable(calculo.test(df.covs = covs2.casos, sampleset = "sampleset_UMAP"))
+```
+
+```{r}
+r <- calculo.test(df.covs = covs2.casos, sampleset = "sampleset_UMAP") %>%
+  arrange(p.value) %>%
+  dplyr::select(Covariable, "PC extremo" = Principal.component, "Frecuencia Mininima Esperada" = Minimun.expected.frequency, test, p.value) 
+
+r %>%
+  kable("html", caption = "<h2>Casos en UMAP</h2>") %>%
+  kable_paper("striped", full_width = F) %>%
+  kable_styling(full_width = F) %>%
+  row_spec(which(r$p.value < 0.1), background = "#CAE1FF", bold = T)
+```
+
+
+```{r, warning=FALSE}
+tests <- calculo.test(df.covs = covs2.casos, sampleset = "sampleset_UMAP") %>%
+  filter(p.value <= 0.1) 
+```
+
+```{r, fig.height=8, fig.width=8}
+plot.pvalue.sig <- function(df, test.df) {
+  
+  plots <- list()
+  
+  for (i in 1:nrow(test.df)) {
+    variable <- as.character(test.df[i, 1])
+    component <- as.character(test.df[i, 2])
+    Minimun.expected.frequency <- as.character(test.df[i, 3])
+    test.used <- as.character(test.df[i, 4])
+    p.value <- as.character(test.df[i, 5])
+    
+    df.filtered <- df %>%
+      mutate(modified.class = ifelse(sampleset_UMAP == component, component, paste("Not", component))) %>%
+      dplyr::select(all_of(variable), modified.class) %>%
+      mutate(class = factor(modified.class, levels = c(component, paste("Not", component))))
+    
+    p <- ggbarstats(
+      data = df.filtered, 
+      x = !!sym(variable), 
+      y = class, 
+      xlab = "", title = paste(component, variable), 
+      results.subtitle = FALSE, 
+      subtitle = paste0(test.used, " with p-value = ", p.value, ". \nMinimum expected freq: ", Minimun.expected.frequency)) + 
+    scale_fill_manual(values = c("#4A708B", "#87CEEB"))
+    
+    plots[[paste(variable, component)]] <- p
+  }
+  
+  return(plots)
+}
+
+```
+
+```{r}
+plots <- plot.pvalue.sig(df = covs2.casos, test.df = tests)
+
+plot_list <- lapply(plots, ggplotGrob)
+
+grid.arrange(grobs = plot_list, ncol = 2)
+```
+
+### Casos y sanos
+
+#### Test estadistico
+
+Calculo test estadistico
+
+```{r,warning=FALSE}
+reactable(calculo.test(df.covs = covs2, sampleset = "sampleset_UMAP"))
+```
+
+```{r}
+r <- calculo.test(df.covs = covs2, sampleset = "sampleset_UMAP") %>%
+  arrange(p.value) %>%
+  dplyr::select(Covariable, "PC extremo" = Principal.component, "Frecuencia Mininima Esperada" = Minimun.expected.frequency, test, p.value) 
+
+r %>%
+  kable("html", caption = "<h2>Casos y Controles en UMAP</h2>") %>%
+  kable_paper("striped", full_width = F) %>%
+  kable_styling(full_width = F) %>%
+  row_spec(which(r$p.value < 0.1), background = "#CAE1FF", bold = T)
+```
+
+
+```{r, warning=FALSE}
+tests <- calculo.test(df.covs = covs2, sampleset = "sampleset_UMAP") %>%
+  filter(p.value <= 0.1) 
+```
+
+```{r, fig.height=8, fig.width=12}
+plots <- plot.pvalue.sig(df = covs2, test.df = tests)
+
+grid.arrange(plots$`cogdx_4 mUMAP1 positivo` , plots$`braaksc_5 mUMAP1 positivo`, plots$`ceradsc_4 mUMAP1 positivo`, plots$`ceradsc_2 mUMAP1 positivo`, plots$`cogdx_1 mUMAP1 positivo`, plots$`apoe_genotype_34 mUMAP1 positivo`, plots$`braaksc_3 mUMAP1 positivo`, ncol= 3)
+
+# plot_list <- lapply(plots, ggplotGrob)
+# 
+# grid.arrange(grobs = c(plot_list[1], plot_list[2], plot_list[3], plot_list[4]), ncol = 2)
+#   grid.arrange(grobs = c(plot_list[5], plot_list[6], plot_list[7], plot_list[8]), ncol = 2)
+#   grid.arrange(grobs = c(plot_list[9], plot_list[10]), ncol = 2)
+```
+
+# Guardar
+
+```{r}
+save.image("Mecanismo de anotación basado en diferencias clinico demográficas.RData")
+```

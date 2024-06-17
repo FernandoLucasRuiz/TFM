@@ -1,0 +1,916 @@
+---
+title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
+subtitle: "Mecanismo de anotación basado en diferencias biológicas"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+# Cargar los datos del mecanismo de deteccion de outliers
+
+```{r}
+load("Detección variables biologicas importante mediante RF.RData")
+```
+
+# Todos genes
+
+```{r}
+important.genes.top <- important.genes.umap1pos 
+
+selected_columns <- colnames(mat_exp_alz_genes.RF) %in% c(important.genes.top$rowname, "class")
+
+df <- mat_exp_alz_genes.RF[, selected_columns]
+
+conteo <- 0
+for (i in important.genes.top$rowname){
+  if (i != "class"){
+    result <- t.test(df[[i]] ~ df$class)
+    if (result$p.value < 0.05){
+      result$p.value
+      conteo <- conteo + 1
+    } else {
+      print(paste("Select first", conteo, "genes"))
+      break
+    }
+  }
+}
+```
+
+```{r}
+p1.todos <- important.genes.umap1pos %>%
+  head(100) %>%
+  mutate(row_index = row_number(),  # Crear una columna numérica para el índice
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = Overall)) +  # Usar row_index en el eje X
+    geom_point() +
+    geom_line() +
+    #geom_hline(aes(yintercept = Overall[row_index == 50]), color = "red", linetype = "dashed") +
+    labs(title = "Importancia genes en RF de mUMAP1pos", y = "Importancia", x = "") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 10)) +
+    ylim(c(0, 100))
+
+p1.todos
+```
+
+```{r, fig.height=10}
+important.genes.top <- important.genes.umap1pos %>%
+  head(., 56)
+  #head(., conteo) 
+
+selected_columns <- colnames(mat_exp_alz_genes.RF) %in% c(important.genes.top$rowname, "class")
+
+df <- mat_exp_alz_genes.RF[, selected_columns]
+
+df_long <- df %>%
+  gather(key = "Gene", value = "Expression", -class)
+
+df_long$Gene <- factor(df_long$Gene, levels = important.genes.top$rowname)
+
+ggplot(df_long, aes(x = class, y = Expression, fill = class)) +
+  geom_boxplot() +
+  facet_wrap(~ Gene, scales = "free_y") +
+  labs(title = "", x = "mUMAP1pos", y = "Expression", fill = "mUMAP1pos") +
+  theme_minimal() +
+  scale_fill_manual(values = c("1" = "#178B84", "0" = "#F3F6E3"))
+
+```
+
+
+## GO
+
+```{r}
+# matriz.AD.minus.important.genes <- mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname] %>%
+#   select(all_of(genes_upregulados))
+# 
+# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
+#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
+#                      organism = "hsapiens",
+#                      sources = "GO", 
+#                      multi_query = T,
+#                      highlight = T,
+#                      exclude_iea = T)
+# 
+# gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r}
+top_genes_umap1pos.gprofiler = gconvert(important.genes.top$rowname)
+top_genes_matriz.gprofiler = gconvert(colnames(mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname]))
+
+# enrichment analysis using gene names
+multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
+                     "Otros genes EA" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE,
+          evcodes = TRUE, 
+          sources = "GO", 
+          highlight = T,
+          exclude_iea = T)
+
+multi_gp$result <- multi_gp$result %>%
+  filter(highlighted == T)
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
+
+```
+
+```{r, fig.height=10, fig.width=8}
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size)
+
+specific_umap1_genes <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "mUMAP1pos genes", ]
+
+matriz_genes_no_umap1 <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "Otros genes EA" & gp_mod_enrich@result$ID %in% specific_umap1_genes$ID, ]
+
+if (length(rownames(matriz_genes_no_umap1)) != 0){
+  # Paso 3: Comparar los valores de "generationumerico" para los IDs comunes
+comparacion <- merge(specific_umap1_genes, matriz_genes_no_umap1, by = "ID", suffixes = c("_umap1", "_matriz"))
+
+# Filtrar aquellos IDs donde el "generationumerico" es mayor en "mUMAP1pos genes"
+ids_mayor_generationumerico <- comparacion[comparacion$generationumerico_umap1 > comparacion$generationumerico_matriz, "ID"]
+ids_igual_menor_generationumerico <- comparacion[comparacion$generationumerico_umap1 <= comparacion$generationumerico_matriz, "ID"]
+
+# Paso 4: Seleccionar las filas originales que cumplen con la condición
+resultado <- rbind(specific_umap1_genes, matriz_genes_no_umap1[matriz_genes_no_umap1$ID %in% ids_mayor_generationumerico,])
+
+resultado <- resultado[!resultado$ID %in% ids_igual_menor_generationumerico,]
+
+} else {
+  resultado <- specific_umap1_genes
+}
+
+gp_mod_enrich@result <- resultado %>%
+  arrange(desc(generationumerico))
+
+enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "GeneRatio", title = "GO enrichment upregulated genes in UMAP1+")
+```
+
+## KEGG
+
+```{r}
+# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
+#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
+#                      organism = "hsapiens",
+#                      sources = "KEGG", 
+#                      multi_query = T,
+#                      highlight = T)
+# 
+# gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r, fig.height=10, fig.width=8}
+# enrichment analysis using gene names
+multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
+                     "Otros genes EA" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "KEGG")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
+```
+
+```{r, fig.height=10, fig.width=8}
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size)
+
+specific_umap1_genes <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "mUMAP1pos genes", ]
+
+matriz_genes_no_umap1 <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "Otros genes EA" & gp_mod_enrich@result$ID %in% specific_umap1_genes$ID, ]
+
+if (length(rownames(matriz_genes_no_umap1)) != 0){
+  # Paso 3: Comparar los valores de "generationumerico" para los IDs comunes
+comparacion <- merge(specific_umap1_genes, matriz_genes_no_umap1, by = "ID", suffixes = c("_umap1", "_matriz"))
+
+# Filtrar aquellos IDs donde el "generationumerico" es mayor en "mUMAP1pos genes"
+ids_mayor_generationumerico <- comparacion[comparacion$generationumerico_umap1 > comparacion$generationumerico_matriz, "ID"]
+ids_igual_menor_generationumerico <- comparacion[comparacion$generationumerico_umap1 <= comparacion$generationumerico_matriz, "ID"]
+
+# Paso 4: Seleccionar las filas originales que cumplen con la condición
+resultado <- rbind(specific_umap1_genes, matriz_genes_no_umap1[matriz_genes_no_umap1$ID %in% ids_mayor_generationumerico,])
+
+resultado <- resultado[!resultado$ID %in% ids_igual_menor_generationumerico,]
+
+} else {
+  resultado <- specific_umap1_genes
+}
+
+gp_mod_enrich@result <- resultado %>%
+  arrange(desc(generationumerico))
+
+enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "GeneRatio", title = "GO enrichment upregulated genes in UMAP1+")
+```
+
+## REAC
+
+```{r}
+# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
+#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
+#                      organism = "hsapiens",
+#                      sources = "REAC", 
+#                      multi_query = T,
+#                      highlight = T)
+# 
+# gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r, fig.height=10, fig.width=8}
+# enrichment analysis using gene names
+multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
+                     "Otros genes EA" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "REAC")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
+
+```
+
+```{r, fig.height=10, fig.width=8}
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size)
+
+specific_umap1_genes <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "mUMAP1pos genes", ]
+
+matriz_genes_no_umap1 <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "Otros genes EA" & gp_mod_enrich@result$ID %in% specific_umap1_genes$ID, ]
+
+if (length(rownames(matriz_genes_no_umap1)) != 0){
+  # Paso 3: Comparar los valores de "generationumerico" para los IDs comunes
+comparacion <- merge(specific_umap1_genes, matriz_genes_no_umap1, by = "ID", suffixes = c("_umap1", "_matriz"))
+
+# Filtrar aquellos IDs donde el "generationumerico" es mayor en "mUMAP1pos genes"
+ids_mayor_generationumerico <- comparacion[comparacion$generationumerico_umap1 > comparacion$generationumerico_matriz, "ID"]
+ids_igual_menor_generationumerico <- comparacion[comparacion$generationumerico_umap1 <= comparacion$generationumerico_matriz, "ID"]
+
+# Paso 4: Seleccionar las filas originales que cumplen con la condición
+resultado <- rbind(specific_umap1_genes, matriz_genes_no_umap1[matriz_genes_no_umap1$ID %in% ids_mayor_generationumerico,])
+
+resultado <- resultado[!resultado$ID %in% ids_igual_menor_generationumerico,]
+
+} else {
+  resultado <- specific_umap1_genes
+}
+
+gp_mod_enrich@result <- resultado %>%
+  arrange(desc(generationumerico))
+
+enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "GeneRatio", title = "GO enrichment upregulated genes in UMAP1+")
+```
+
+# Upregulated genes
+
+```{r}
+important.genes.top <- important.genes.umap1pos %>%
+  filter(rowname %in% genes_upregulados)
+
+selected_columns <- colnames(mat_exp_alz_genes.RF) %in% c(important.genes.top$rowname, "class")
+
+df <- mat_exp_alz_genes.RF[, selected_columns]
+
+conteo <- 0
+for (i in important.genes.top$rowname){
+  if (i != "class"){
+    result <- t.test(df[[i]] ~ df$class)
+    if (result$p.value < 0.05){
+      result$p.value
+      conteo <- conteo + 1
+    } else {
+      print(paste("Select first", conteo, "genes"))
+      break
+    }
+  }
+}
+```
+
+```{r}
+p.sobre <- important.genes.umap1pos %>%
+  filter(rowname %in% genes_upregulados) %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  # Crear una columna numérica para el índice
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = Overall)) +  # Usar row_index en el eje X
+    geom_point() +
+    geom_line() +
+    geom_hline(aes(yintercept = Overall[row_index == 30]), color = "red", linetype = "dashed") +
+    labs(title = "Genes sobreexpresados en mUMAP1pos", y = "Importancia en RF", x = "") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 10)) 
+
+p.sobre
+
+```
+
+```{r, fig.height=10}
+important.genes.top <- important.genes.umap1pos %>%
+  filter(rowname %in% genes_upregulados) %>%
+  head(., 30)
+  #head(., conteo) 
+
+selected_columns <- colnames(mat_exp_alz_genes.RF) %in% c(important.genes.top$rowname, "class")
+
+df <- mat_exp_alz_genes.RF[, selected_columns]
+
+df_long <- df %>%
+  gather(key = "Gene", value = "Expression", -class)
+
+df_long$Gene <- factor(df_long$Gene, levels = important.genes.top$rowname)
+
+ggplot(df_long, aes(x = class, y = Expression, fill = class)) +
+  geom_boxplot() +
+  facet_wrap(~ Gene, scales = "free_y") +
+  labs(title = "Boxplots Genes", x = "UMAP1pos", y = "Expression", fill = "mUMAP2pos") 
+
+```
+
+
+## GO
+
+```{r}
+# matriz.AD.minus.important.genes <- mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname] %>%
+#   select(all_of(genes_upregulados))
+# 
+# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
+#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
+#                      organism = "hsapiens",
+#                      sources = "GO", 
+#                      multi_query = T,
+#                      highlight = T,
+#                      exclude_iea = T)
+# 
+# gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r, fig.height=10, fig.width=8}
+top_genes_umap1pos.gprofiler = gconvert(important.genes.top$rowname)
+top_genes_matriz.gprofiler = gconvert(colnames(mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname]))
+
+# enrichment analysis using gene names
+multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
+                     "Otros genes EA" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE,
+          evcodes = TRUE, 
+          sources = "GO", 
+          highlight = T,
+          exclude_iea = T)
+
+multi_gp$result <- multi_gp$result %>%
+  filter(highlighted == T)
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
+
+```
+
+```{r, fig.height=10, fig.width=8}
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size)
+
+specific_umap1_genes <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "mUMAP1pos genes", ]
+
+matriz_genes_no_umap1 <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "Otros genes EA" & gp_mod_enrich@result$ID %in% specific_umap1_genes$ID, ]
+
+if (length(rownames(matriz_genes_no_umap1)) != 0){
+  # Paso 3: Comparar los valores de "generationumerico" para los IDs comunes
+comparacion <- merge(specific_umap1_genes, matriz_genes_no_umap1, by = "ID", suffixes = c("_umap1", "_matriz"))
+
+# Filtrar aquellos IDs donde el "generationumerico" es mayor en "mUMAP1pos genes"
+ids_mayor_generationumerico <- comparacion[comparacion$generationumerico_umap1 > comparacion$generationumerico_matriz, "ID"]
+ids_igual_menor_generationumerico <- comparacion[comparacion$generationumerico_umap1 <= comparacion$generationumerico_matriz, "ID"]
+
+# Paso 4: Seleccionar las filas originales que cumplen con la condición
+resultado <- rbind(specific_umap1_genes, matriz_genes_no_umap1[matriz_genes_no_umap1$ID %in% ids_mayor_generationumerico,])
+
+resultado <- resultado[!resultado$ID %in% ids_igual_menor_generationumerico,]
+
+} else {
+  resultado <- specific_umap1_genes
+}
+
+gp_mod_enrich@result <- resultado %>%
+  arrange(desc(generationumerico)) %>%
+  dplyr::filter(!Description %in% "cytosol")
+
+p.go.sobre <- enrichplot::dotplot(gp_mod_enrich, showCategory = 16, x = "Cluster", size = "GeneRatio") + 
+  ggtitle("Enriquecimiento GO") +
+  theme(plot.title = element_text(face = "bold", size = 16, hjust = 0.6),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+p.go.sobre 
+```
+
+## KEGG
+
+```{r}
+# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
+#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
+#                      organism = "hsapiens",
+#                      sources = "KEGG", 
+#                      multi_query = T,
+#                      highlight = T)
+# 
+# gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r, fig.height=10, fig.width=8}
+# enrichment analysis using gene names
+multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
+                     "Otros genes EA" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "KEGG")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
+```
+
+```{r, fig.height=10, fig.width=8}
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size)
+
+specific_umap1_genes <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "mUMAP1pos genes", ]
+
+matriz_genes_no_umap1 <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "Otros genes EA" & gp_mod_enrich@result$ID %in% specific_umap1_genes$ID, ]
+
+if (length(rownames(matriz_genes_no_umap1)) != 0){
+  # Paso 3: Comparar los valores de "generationumerico" para los IDs comunes
+comparacion <- merge(specific_umap1_genes, matriz_genes_no_umap1, by = "ID", suffixes = c("_umap1", "_matriz"))
+
+# Filtrar aquellos IDs donde el "generationumerico" es mayor en "mUMAP1pos genes"
+ids_mayor_generationumerico <- comparacion[comparacion$generationumerico_umap1 > comparacion$generationumerico_matriz, "ID"]
+ids_igual_menor_generationumerico <- comparacion[comparacion$generationumerico_umap1 <= comparacion$generationumerico_matriz, "ID"]
+
+# Paso 4: Seleccionar las filas originales que cumplen con la condición
+resultado <- rbind(specific_umap1_genes, matriz_genes_no_umap1[matriz_genes_no_umap1$ID %in% ids_mayor_generationumerico,])
+
+resultado <- resultado[!resultado$ID %in% ids_igual_menor_generationumerico,]
+
+} else {
+  resultado <- specific_umap1_genes
+}
+
+gp_mod_enrich@result <- resultado %>%
+  arrange(desc(generationumerico))
+
+p.kegg.sobre <- enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "GeneRatio") +
+  ggtitle("Enriquecimiento KEGG") +
+  theme(plot.title = element_text(face = "bold", size = 16, hjust = 0.6),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+p.kegg.sobre
+```
+
+## REAC
+
+```{r}
+# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
+#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
+#                      organism = "hsapiens",
+#                      sources = "REAC", 
+#                      multi_query = T,
+#                      highlight = T)
+# 
+# gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r, fig.height=10, fig.width=8}
+# enrichment analysis using gene names
+multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
+                     "Otros genes EA" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "REAC")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
+
+```
+
+```{r, fig.height=10, fig.width=8}
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size)
+
+specific_umap1_genes <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "mUMAP1pos genes", ]
+
+matriz_genes_no_umap1 <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "Otros genes EA" & gp_mod_enrich@result$ID %in% specific_umap1_genes$ID, ]
+
+if (length(rownames(matriz_genes_no_umap1)) != 0){
+  # Paso 3: Comparar los valores de "generationumerico" para los IDs comunes
+comparacion <- merge(specific_umap1_genes, matriz_genes_no_umap1, by = "ID", suffixes = c("_umap1", "_matriz"))
+
+# Filtrar aquellos IDs donde el "generationumerico" es mayor en "mUMAP1pos genes"
+ids_mayor_generationumerico <- comparacion[comparacion$generationumerico_umap1 > comparacion$generationumerico_matriz, "ID"]
+ids_igual_menor_generationumerico <- comparacion[comparacion$generationumerico_umap1 <= comparacion$generationumerico_matriz, "ID"]
+
+# Paso 4: Seleccionar las filas originales que cumplen con la condición
+resultado <- rbind(specific_umap1_genes, matriz_genes_no_umap1[matriz_genes_no_umap1$ID %in% ids_mayor_generationumerico,])
+
+resultado <- resultado[!resultado$ID %in% ids_igual_menor_generationumerico,]
+
+} else {
+  resultado <- specific_umap1_genes
+}
+
+gp_mod_enrich@result <- resultado %>%
+  arrange(desc(generationumerico)) %>%
+  dplyr::filter(!Description %in% c("Disease", "Signal Transduction", "Diseases of signal transduction by growth factor receptors and second messengers", "Intracellular signaling by second messengers"))
+
+p.reac.sobre <- enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "GeneRatio") +
+  ggtitle("Enriquecimiento Reactome") +
+  theme(plot.title = element_text(face = "bold", size = 16, hjust = 0.6),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+p.reac.sobre
+```
+
+# Downregulated genes
+
+```{r}
+important.genes.top <- important.genes.umap1pos %>%
+  filter(rowname %in% genes_downregulados)
+
+selected_columns <- colnames(mat_exp_alz_genes.RF) %in% c(important.genes.top$rowname, "class")
+
+df <- mat_exp_alz_genes.RF[, selected_columns]
+
+conteo <- 0
+for (i in important.genes.top$rowname){
+  if (i != "class"){
+    result <- t.test(df[[i]] ~ df$class)
+    if (result$p.value < 0.05){
+      result$p.value
+      conteo <- conteo + 1
+    } else {
+      print(paste("Select first", conteo, "genes"))
+      
+      break
+    }
+  }
+}
+```
+
+```{r}
+p.infra <- important.genes.umap1pos %>%
+  filter(rowname %in% genes_downregulados) %>%
+  head(50) %>%
+  mutate(row_index = row_number(),  # Crear una columna numérica para el índice
+         rowname = forcats::fct_inorder(rowname)) %>%
+  ggplot(aes(x = row_index, y = Overall)) +  # Usar row_index en el eje X
+    geom_point() +
+    geom_line() +
+    geom_hline(aes(yintercept = Overall[row_index == 30]), color = "red", linetype = "dashed") +
+    labs(title = "Genes infraexpresados en mUMAP1pos", y = "Importancia en RF", x = "") +
+    theme_minimal() +
+    theme(axis.text.x = element_text(size = 10)) 
+
+p.infra
+```
+
+```{r, fig.height=10}
+important.genes.top <- important.genes.umap1pos%>%
+  filter(rowname %in% genes_downregulados) %>%
+  head(., 25)
+
+selected_columns <- colnames(mat_exp_alz_genes.RF) %in% c(important.genes.top$rowname, "class")
+
+df <- mat_exp_alz_genes.RF[, selected_columns]
+
+df_long <- df %>%
+  gather(key = "Gene", value = "Expression", -class)
+
+df_long$Gene <- factor(df_long$Gene, levels = important.genes.top$rowname)
+
+ggplot(df_long, aes(x = class, y = Expression, fill = class)) +
+  geom_boxplot() +
+  facet_wrap(~ Gene, scales = "free_y") +
+  labs(title = "Boxplots Genes", x = "UMAP1pos", y = "Expression", fill = "mUMAP1pos") 
+
+```
+
+
+## GO
+
+```{r}
+# matriz.AD.minus.important.genes <- mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname]
+# 
+# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
+#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
+#                      organism = "hsapiens",
+#                      sources = "GO", 
+#                      multi_query = T,
+#                      highlight = T,
+#                      exclude_iea = T)
+# 
+# gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r, fig.height=10, fig.width=8}
+top_genes_umap1pos.gprofiler = gconvert(important.genes.top$rowname)
+top_genes_matriz.gprofiler = gconvert(colnames(mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname]))
+
+# enrichment analysis using gene names
+multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
+                     "Otros genes EA" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "GO", 
+          highlight = T,
+          exclude_iea = T)
+
+multi_gp$result <- multi_gp$result %>%
+  filter(highlighted == T)
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
+
+```
+
+```{r, fig.height=10, fig.width=8}
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size)
+
+specific_umap1_genes <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "mUMAP1pos genes", ]
+
+matriz_genes_no_umap1 <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "Otros genes EA" & gp_mod_enrich@result$ID %in% specific_umap1_genes$ID, ]
+
+if (length(rownames(matriz_genes_no_umap1)) != 0){
+  # Paso 3: Comparar los valores de "generationumerico" para los IDs comunes
+comparacion <- merge(specific_umap1_genes, matriz_genes_no_umap1, by = "ID", suffixes = c("_umap1", "_matriz"))
+
+# Filtrar aquellos IDs donde el "generationumerico" es mayor en "mUMAP1pos genes"
+ids_mayor_generationumerico <- comparacion[comparacion$generationumerico_umap1 > comparacion$generationumerico_matriz, "ID"]
+ids_igual_menor_generationumerico <- comparacion[comparacion$generationumerico_umap1 <= comparacion$generationumerico_matriz, "ID"]
+
+# Paso 4: Seleccionar las filas originales que cumplen con la condición
+resultado <- rbind(specific_umap1_genes, matriz_genes_no_umap1[matriz_genes_no_umap1$ID %in% ids_mayor_generationumerico,])
+
+resultado <- resultado[!resultado$ID %in% ids_igual_menor_generationumerico,]
+
+} else {
+  resultado <- specific_umap1_genes
+}
+
+gp_mod_enrich@result <- resultado %>%
+  arrange(desc(generationumerico))
+
+p.go.infra <- enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "GeneRatio") +
+  ggtitle("Enriquecimiento GO") +
+  theme(plot.title = element_text(face = "bold", size = 16, hjust = 0.6),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+p.go.infra
+```
+
+
+## KEGG
+
+```{r}
+# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
+#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
+#                      organism = "hsapiens",
+#                      sources = "KEGG", 
+#                      multi_query = T,
+#                      highlight = T)
+# 
+# gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r, fig.height=10, fig.width=8}
+# enrichment analysis using gene names
+multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
+                     "Otros genes EA" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "KEGG")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
+```
+
+```{r, fig.height=10, fig.width=8}
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size)
+
+specific_umap1_genes <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "mUMAP1pos genes", ]
+
+matriz_genes_no_umap1 <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "Otros genes EA" & gp_mod_enrich@result$ID %in% specific_umap1_genes$ID, ]
+
+if (length(rownames(matriz_genes_no_umap1)) != 0){
+  # Paso 3: Comparar los valores de "generationumerico" para los IDs comunes
+comparacion <- merge(specific_umap1_genes, matriz_genes_no_umap1, by = "ID", suffixes = c("_umap1", "_matriz"))
+
+# Filtrar aquellos IDs donde el "generationumerico" es mayor en "mUMAP1pos genes"
+ids_mayor_generationumerico <- comparacion[comparacion$generationumerico_umap1 > comparacion$generationumerico_matriz, "ID"]
+ids_igual_menor_generationumerico <- comparacion[comparacion$generationumerico_umap1 <= comparacion$generationumerico_matriz, "ID"]
+
+# Paso 4: Seleccionar las filas originales que cumplen con la condición
+resultado <- rbind(specific_umap1_genes, matriz_genes_no_umap1[matriz_genes_no_umap1$ID %in% ids_mayor_generationumerico,])
+
+resultado <- resultado[!resultado$ID %in% ids_igual_menor_generationumerico,]
+
+} else {
+  resultado <- specific_umap1_genes
+}
+
+gp_mod_enrich@result <- resultado %>%
+  arrange(desc(generationumerico))
+
+p.kegg.infra <- enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "GeneRatio") +
+  ggtitle("Enriquecimiento KEGG") +
+  theme(plot.title = element_text(face = "bold", size = 16, hjust = 0.6),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+p.kegg.infra
+```
+
+
+## REAC
+
+```{r}
+# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
+#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
+#                      organism = "hsapiens",
+#                      sources = "REAC", 
+#                      multi_query = T,
+#                      highlight = T)
+# 
+# gostplot(gp_up_ordered, interactive = T, capped = T)
+```
+
+```{r, fig.height=10, fig.width=8}
+# enrichment analysis using gene names
+multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
+                     "Otros genes EA" = top_genes_matriz.gprofiler$name), 
+          multi_query = FALSE, 
+          evcodes = TRUE, 
+          sources = "REAC")
+
+# modify the g:Profiler data frame
+gp_mod = multi_gp$result[,c("query", "source", "term_id",
+                                "term_name", "p_value", "query_size", 
+                                "intersection_size", "term_size", 
+                                "effective_domain_size", "intersection")]
+gp_mod$GeneRatio = paste0(gp_mod$intersection_size,  "/", gp_mod$query_size)
+gp_mod$BgRatio = paste0(gp_mod$term_size, "/", gp_mod$effective_domain_size)
+names(gp_mod) = c("Cluster", "Category", "ID", "Description", "p.adjust", 
+                    "query_size", "Count", "term_size", "effective_domain_size", 
+                    "geneID", "GeneRatio", "BgRatio")
+gp_mod$geneID = gsub(",", "/", gp_mod$geneID)
+
+# define as enrichResult object
+gp_mod_enrich  = new("enrichResult", result = gp_mod)
+```
+
+```{r, fig.height=10, fig.width=8}
+gp_mod_enrich@result <- gp_mod_enrich@result %>%
+  mutate(generationumerico = Count / query_size)
+
+specific_umap1_genes <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "mUMAP1pos genes", ]
+
+matriz_genes_no_umap1 <- gp_mod_enrich@result[gp_mod_enrich@result$Cluster == "Otros genes EA" & gp_mod_enrich@result$ID %in% specific_umap1_genes$ID, ]
+
+if (length(rownames(matriz_genes_no_umap1)) != 0){
+  # Paso 3: Comparar los valores de "generationumerico" para los IDs comunes
+comparacion <- merge(specific_umap1_genes, matriz_genes_no_umap1, by = "ID", suffixes = c("_umap1", "_matriz"))
+
+# Filtrar aquellos IDs donde el "generationumerico" es mayor en "mUMAP1pos genes"
+ids_mayor_generationumerico <- comparacion[comparacion$generationumerico_umap1 > comparacion$generationumerico_matriz, "ID"]
+ids_igual_menor_generationumerico <- comparacion[comparacion$generationumerico_umap1 <= comparacion$generationumerico_matriz, "ID"]
+
+# Paso 4: Seleccionar las filas originales que cumplen con la condición
+resultado <- rbind(specific_umap1_genes, matriz_genes_no_umap1[matriz_genes_no_umap1$ID %in% ids_mayor_generationumerico,])
+
+resultado <- resultado[!resultado$ID %in% ids_igual_menor_generationumerico,]
+
+} else {
+  resultado <- specific_umap1_genes
+}
+
+gp_mod_enrich@result <- resultado %>%
+  arrange(desc(generationumerico)) %>%
+  dplyr::filter(!Description %in% c("Metabolism", "Disease", "HIV Infection", "Viral Infection Pathways", "Infectious disease", "Host Interactions of HIV factors", "Diseases of signal transduction by growth factor receptors and second messengers"))
+
+p.reac.infra <- enrichplot::dotplot(gp_mod_enrich, showCategory = 10, x = "Cluster", size = "GeneRatio") +
+  ggtitle("Enriquecimiento Reactome") +
+  theme(plot.title = element_text(face = "bold", size = 16, hjust = 0.6),
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+p.reac.infra
+```
+
+# Guardar
+
+```{r}
+save.image("Mecanismo de anotación basado en diferencias biológicas.RData")
+```

@@ -1,0 +1,288 @@
+---
+title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
+subtitle: "Mecanismo de detección outliers Proteosoma"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+# Cargar los datos del mecanismo de deteccion de outliers
+
+```{r}
+load("Mecanismo de anotación basado en diferencias biológicas.RData")
+```
+
+# Cargando geneset de proteosoma de KEGG
+
+Entonces ahora cojo de KEGG el término hsa03050 de Proteasome y realizo los mismos pasos para extraer los outliers.
+
+```{r}
+# geneset de proteasome de kegg
+
+tab <- getGeneKEGGLinks(species="hsa")
+tab$Symbol <- mapIds(org.Hs.eg.db, tab$GeneID,
+                       column="SYMBOL", keytype="ENTREZID")
+
+paths <- getKEGGPathwayNames(species="hsa")
+geneset_proteasome <- tab$Symbol[tab$PathwayID=="hsa03050"]
+```
+
+## Mecanismos de filtrado
+
+Filtrar la matriz Mnxm a Mnxm’, con m’ \<\< n para filtrar los predictores, en este caso de la matriz de expresión mat_exp.
+
+```{r}
+mat_exp_proteosome_genes <- mat_exp[, colnames(mat_exp) %in% geneset_proteasome]
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = list(GenesMatriz = colnames(mat_exp), GenesetAlzheimer = geneset_proteasome),
+  category.names = c("Matrix Genes", "Geneset Alzheimer"),
+  filename = NULL,
+  output = FALSE,  # Asegura que no se exporte a un archivo
+  fill = c("#440154ff", '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  cat.pos = 25, #posicion de las categoricas
+  cat.dist = 0.1, #distancia de las categoricas
+  rotation.degree = 0, 
+  margin = 0.1, # hacerla más pequeña
+  lwd=0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = "Proteasome genes in exp matrix",
+  main.fontface= "bold", 
+  main.cex = 2,
+  main.pos = c(0.5, 1)
+)
+
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+### UMAP
+
+```{r}
+local.config <- umap.defaults
+# local.config$n_neighbors <- 4
+# local.config$n_components <- 2
+# local.config$n_epochs <- 100
+# local.config$metric<- "euclidean"
+set.seed(1234)
+umap.ad <- umap(mat_exp_proteosome_genes,random_stage=1234, local.config)
+
+umap.data <- as.data.frame(umap.ad$layout)
+```
+
+#### Seleccionamos outliers
+
+Vemos aquí que la "cola" de muestras más extremas ahora se observa en el UMAP2 negativo!
+
+```{r}
+rownames(umap.data) <- rownames(mat_exp_proteosome_genes)
+
+# Calcular la media y la desviación estándar para cada componente de t-SNE
+mean.umap1 <- mean(umap.data[,1])
+sd.umap1 <- sd(umap.data[,1])
+mean.umap2 <- mean(umap.data[,2])
+sd.umap2 <- sd(umap.data[,2])
+
+# Identificar muestras a más de 2 desviaciones estándar de la media
+outliers.umap1 <- umap.data[abs(umap.data[,1] - mean.umap1) > 1.5 * sd.umap1, ]
+outliers.umap2 <-umap.data[abs(umap.data[,2] - mean.umap2) > 1.5 * sd.umap2, ]
+```
+
+```{r, echo=F}
+plot1 <- ggplot(umap.data, aes(x = V1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.umap1 + 1.5*sd.umap1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap1 - 1.5*sd.umap1, linetype = "dashed", color = "blue") +
+  labs(title = "UMAP1 density with 1.5*SD UMAP") +
+  geom_text(data = outliers.umap1, 
+            aes(x = outliers.umap1[,1], y= 0, label = rownames(outliers.umap1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V1, y = 0), color= ifelse(abs(umap.ad$layout[,1]) > 1.5*sd.umap1, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+plot2 <- ggplot(umap.data, aes(x = V2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.umap2 + 1.5*sd.umap2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap2 - 1.5*sd.umap2, linetype = "dashed", color = "blue") +
+  labs(title = "UMAP2 density with 1.5*SD UMAP") +
+  geom_text(data = outliers.umap2, 
+            aes(x = outliers.umap2[,2], y= 0, label = rownames(outliers.umap2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V2, y = 0), color= ifelse(abs(umap.data[,2]) > 1.5*sd.umap2, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1, plot2, ncol = 1)
+```
+
+
+# Diferencia
+
+Ahora, vamos a ver las muestras que han sido detectados como casos extremos en ambos casos. Empezamos primero cogiendo todos los outliers ya sean casos o controles. Vemos que con el mUMAP1+ de ALZHEIMER hay 15 muestras que tambien están en los mUMAP2- del geneset de PROTEASOME.
+
+## todas muestras
+
+```{r}
+load("mi_entorno_EnrDif_Alz.RData")
+mUMAP1.neg.alz <- mUMAP1.neg
+mUMAP1.pos.alz <- mUMAP1.pos
+mUMAP2.neg.alz <- mUMAP2.neg
+mUMAP2.pos.alz <- mUMAP2.pos
+
+load("mi_entorno_EnrDif_proteosome_kegg.RData")
+mUMAP1.neg.prot <- mUMAP1.neg
+mUMAP1.pos.prot <- mUMAP1.pos
+mUMAP2.neg.prot <- mUMAP2.neg
+mUMAP2.pos.prot <- mUMAP2.pos
+```
+
+```{r}
+lista.outliers <- list(mUMAP2.pos.prot, mUMAP2.neg.prot, mUMAP1.pos.prot, mUMAP1.neg.prot, mUMAP2.pos.alz, mUMAP2.neg.alz, mUMAP1.pos.alz, mUMAP1.neg.alz)
+
+names(lista.outliers) <- c("mUMAP2.pos.prot", "mUMAP2.neg.prot", "mUMAP1.pos.prot", "mUMAP1.neg.prot", "mUMAP2.pos.alz", "mUMAP2.neg.alz", "mUMAP1.pos.alz", "mUMAP1.neg.alz")
+```
+
+```{r, fig.width=8, fig.height=8}
+names(lista.outliers) <- c("mUMAP2+ Proteasome", "mUMAP2- Proteasome", "mUMAP1+ Proteasome", "mUMAP1- Proteasome", "mUMAP2+ Alzheimer", "mUMAP2- Alzheimer", "mUMAP1+ Alzheimer",  "mUMAP1- Alzheimer")
+
+upset(fromList(lista.outliers), 
+      order.by = "freq",
+      sets.x.label = "Outliers",
+      mainbar.y.label = "Intersección",
+      point.size = 3.5, line.size = 1.5,
+      sets = names(lista.outliers),
+      text.scale = c(2, 1.3, 1, 1, 2, 1.7),
+      queries = list(list(query = intersects, params = list("mUMAP1+ Alzheimer","mUMAP2- Proteasome"), color = "orange", active = T)),
+      )
+# Agregar el título usando grid.text
+grid.text("Casos y controles", x = 0.2, y = 0.95, gp = gpar(fontsize = 18, fontface = "bold"))
+
+
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = lista.outliers[c("mUMAP2- Proteasome", "mUMAP1+ Alzheimer")],
+  category.names = c("mUMAP2- Proteasome", "mUMAP1+ Alzheimer"),
+  filename = NULL,
+  output = FALSE,  
+  fill = c("#21908CFF", '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  #cat.pos = c(0, 0, 0), #posición de las categorías
+  cat.dist = 0.05, #distancia de las categorías
+  rotation.degree = 0, 
+  margin = 0.05, # hacerla más pequeña
+  lwd = 0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = paste0("Muestras outliers Controles y Casos"),
+  main.fontface = "bold", 
+  main.cex = 1.5,
+  main.pos = c(0.5, 0.95)
+)
+
+# Calcular la intersección
+interseccion_ABC <- Reduce(intersect, lista.outliers[c(2, 7)])
+
+# Dibuja el diagrama de Venn y el texto de la intersección
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```
+
+## casos
+
+Cuando filtramos por los outliers que son CASOS, vemos que pasa a ser la que más combinaciones tienen entre sí con 12 pacientes en común.
+
+```{r}
+load("mi_entorno_EnrDif_Alz.RData")
+mUMAP1.neg.alz <- mUMAP1.neg[mUMAP1.neg %in% covs2.casos$mrna_id]
+mUMAP1.pos.alz <- mUMAP1.pos[mUMAP1.pos %in% covs2.casos$mrna_id]
+mUMAP2.neg.alz <- mUMAP2.neg[mUMAP2.neg %in% covs2.casos$mrna_id]
+mUMAP2.pos.alz <- mUMAP2.pos[mUMAP2.pos %in% covs2.casos$mrna_id]
+
+load("mi_entorno_EnrDif_proteosome_kegg.RData")
+mUMAP1.neg.prot <- mUMAP1.neg[mUMAP1.neg %in% covs2.casos$mrna_id]
+mUMAP1.pos.prot <- mUMAP1.pos[mUMAP1.pos %in% covs2.casos$mrna_id]
+mUMAP2.neg.prot <- mUMAP2.neg[mUMAP2.neg %in% covs2.casos$mrna_id]
+mUMAP2.pos.prot <- mUMAP2.pos[mUMAP2.pos %in% covs2.casos$mrna_id]
+```
+
+```{r}
+lista.outliers <- list(mUMAP2.pos.prot, mUMAP2.neg.prot, mUMAP1.pos.prot, mUMAP1.neg.prot, mUMAP2.pos.alz, mUMAP2.neg.alz, mUMAP1.pos.alz, mUMAP1.neg.alz)
+
+names(lista.outliers) <- c("mUMAP2.pos.prot", "mUMAP2.neg.prot", "mUMAP1.pos.prot", "mUMAP1.neg.prot", "mUMAP2.pos.alz", "mUMAP2.neg.alz", "mUMAP1.pos.alz", "mUMAP1.neg.alz")
+```
+
+```{r, fig.width=8, fig.height=8}
+names(lista.outliers) <- c("mUMAP2+ Proteasome", "mUMAP2- Proteasome", "mUMAP1+ Proteasome", "mUMAP1- Proteasome", "mUMAP2+ Alzheimer", "mUMAP2- Alzheimer", "mUMAP1+ Alzheimer",  "mUMAP1- Alzheimer")
+
+upset(fromList(lista.outliers), 
+      order.by = "freq",
+      sets.x.label = "Outliers",
+      mainbar.y.label = "Intersección",
+      point.size = 3.5, line.size = 1.5,
+      sets = names(lista.outliers),
+      text.scale = c(2, 1.3, 1, 1, 2, 1.3),
+      queries = list(list(query = intersects, params = list("mUMAP1+ Alzheimer","mUMAP2- Proteasome"), color = "orange", active = T)),
+      )
+# Agregar el título usando grid.text
+grid.text("Casos", x = 0.2, y = 0.95, gp = gpar(fontsize = 18, fontface = "bold"))
+```
+
+```{r}
+venn.plot <- venn.diagram(
+  x = lista.outliers[c("mUMAP2- Proteasome", "mUMAP1+ Alzheimer")],
+  category.names = c("mUMAP2- Proteasome", "mUMAP1+ Alzheimer"),
+  filename = NULL,
+  output = FALSE,  
+  fill = c("#21908CFF", '#fde725ff'),
+  cex = 1,  # Aumenta el tamaño del texto
+  fontface = "bold",
+  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.fontface = "bold",
+  cat.default.pos = "text",
+  #cat.pos = c(0, 0, 0), #posición de las categorías
+  cat.dist = 0.05, #distancia de las categorías
+  rotation.degree = 0, 
+  margin = 0.05, # hacerla más pequeña
+  lwd = 0.5,
+  lty = "dashed", # Estilo de línea discontinua
+  edge.col = "grey", # Color de los bordes
+  main = paste0("Muestras outliers Casos"),
+  main.fontface = "bold", 
+  main.cex = 1.5,
+  main.pos = c(0.5, 0.95)
+)
+
+# Calcular la intersección
+interseccion_ABC <- Reduce(intersect, lista.outliers[c(2, 7)])
+
+# Dibuja el diagrama de Venn y el texto de la intersección
+grid.newpage()  # Asegura que el lienzo esté limpio
+grid.draw(venn.plot)
+```

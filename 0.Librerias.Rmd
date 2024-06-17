@@ -1,0 +1,47 @@
+---
+title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
+subtitle: "Librerias"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse) # Colección de paquetes para ciencia de datos (incluye ggplot2, dplyr, tidyr, readr, purrr, tibble)
+library(reshape) # Herramientas para reorganizar datos
+library(Hmisc) # resúmenes estadísticos
+library(limma) # Análisis de datos de expresión genética
+library(AnnotationDbi) # Interfaz para bases de datos de anotaciones bioinformáticas
+library(org.Hs.eg.db) # Datos de anotación para genes humanos
+library(VennDiagram) # Generación de diagramas de Venn 
+library(gridExtra) # Mostrar varias gráficas
+library(patchwork) # Combinar múltiples ggplots en un único plot
+library(ggrepel) # Mejora la visualización de texto en ggplots evitando solapamientos de texto
+library(Rtsne) # Implementación de t-SNE
+library(umap) # Implementación de UMAP
+library(ggVennDiagram) # diagrama de Venn
+library(fastDummies)  # Para realizar el one-hot encoding
+library(reactable) # para tablas interactivas
+library(factoextra)
+library(ggstatsplot) # para barras de porcentajes de las tablas de contingencia
+library(UpSetR) # para diagramas de upset
+library(gprofiler2) # enriquecimiento grofiler
+library(clusterProfiler) # para enriquecimientos
+library(enrichplot) # plots de enriquecimiento
+library(DOSE) # needed to convert to enrichResult object
+library(kableExtra) # tablas
+```

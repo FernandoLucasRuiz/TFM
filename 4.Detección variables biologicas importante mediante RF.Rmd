@@ -1,0 +1,218 @@
+---
+title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
+subtitle: "Detección variables biologicas importante mediante RF"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+# Cargar los datos del mecanismo de deteccion de outliers
+
+```{r}
+load("Mecanismo de anotación basado en diferencias clinico demográficas.RData")
+```
+
+# UMAP
+
+```{r}
+umap.data <- data.frame(umap.ad$layout)[,1:2]
+colnames(umap.data) <- c("umap1", "umap2")
+
+covs2 <- merge(covs2, umap.data, by="row.names")
+rownames(covs2) <- covs2$mrna_id
+covs2$Row.names <- NULL
+```
+
+```{r, fig.width=8, fig.height=6}
+umap.data <- data.frame(umap.ad$layout)[,1:2]
+colnames(umap.data) <- c("umap1", "umap2")
+
+covs2_df <- covs2.casos %>%
+  dplyr::select(mrna_id, sampleset_UMAP)
+
+para.plot <- merge(umap.data, covs2_df, by = "row.names")
+rownames(para.plot) <- para.plot$Row.names
+para.plot$Row.names <- NULL
+
+ggplot(para.plot, aes_string(x = "umap1", y = "umap2", color = "sampleset_UMAP")) +
+    geom_point(show.legend = TRUE, size = 3) +
+    geom_text_repel(aes(label=ifelse(mrna_id %in% rownames(outliers.umap1) | mrna_id %in% rownames(outliers.umap2), as.character(gsub("_.*", "", covs2$mrna_id)), "")),
+                  color = "black",
+                  max.overlaps = 30, # Reduce el número máximo de solapamientos
+                  point.padding = unit(0.2, "lines"), # Menos padding alrededor de los puntos
+                  size = 3, 
+                  fontface = "bold",
+                  segment.size = 0.2, # Líneas de guía más finas
+                  segment.color = 'grey50',
+                  max.segment.length = unit(0.5, "lines"), # Líneas de guía más cortas
+                  arrow = arrow(length = unit(0.02, "npc"), type = "closed", ends = "last")) +
+    theme_minimal() +
+    labs(title = "UMAP",
+         x = "umap1", y = "umap2") +
+    theme(
+      legend.title = element_blank(),
+      legend.text = element_text(size = 12),
+      text = element_text(size = 12),
+      legend.key.size = unit(0.5, "cm")) +
+  geom_point(data= (covs2 %>% filter(neuroStatus == 0)), aes_string(x = "umap1", y = "umap2", color = "sampleset_UMAP"), alpha = 0.5) 
+```
+
+## Seleccion genes importantes 
+
+```{r}
+estado <- rep(0, nrow(mat_exp_alz_genes))
+
+estado[rownames(mat_exp_alz_genes) %in% mUMAP1.pos] <- 1
+
+# Añadir la nueva columna a la matriz de expresión de genes
+mat_exp_alz_genes.RF <- data.frame(cbind(mat_exp_alz_genes, class = estado))
+
+mat_exp_alz_genes.RF$class <- as.factor(mat_exp_alz_genes.RF$class)
+
+mat_exp_alz_genes.RF <- mat_exp_alz_genes.RF[rownames(covs2.casos),]
+```
+
+```{r}
+library(caret)
+library(randomForest)
+library(doParallel)
+num_cores <- detectCores() - 2
+registerDoParallel(cores=num_cores)
+```
+
+```{r}
+modelLookup("ranger")
+```
+
+Aquí he utilizado el parámetro importance = "permutation"
+
+```{r}
+# Definir una función para calcular la Accuracy balanceada
+balanced_accuracy <- function(data, lev = NULL, model = NULL) {
+  cm <- confusionMatrix(data$pred, data$obs)
+  sensitivity <- cm$byClass["Sensitivity"]
+  specificity <- cm$byClass["Specificity"]
+  balanced_acc <- mean(c(sensitivity, specificity))
+  c(BalancedAccuracy = balanced_acc)
+}
+
+# Definir las métricas de evaluación que queremos utilizar
+RFControl <- trainControl(
+  method = "cv", 
+  number = 10,
+  repeats = 10,
+  summaryFunction = balanced_accuracy,
+  allowParallel = TRUE,
+  seeds = NULL, 
+  returnResamp = "final",
+)
+
+set.seed(1234)
+sqr.genes <- round(sqrt(ncol(mat_exp_alz_genes.RF)))
+
+mygrid <- expand.grid(mtry = c(sqr.genes - 2, sqr.genes - 1, sqr.genes, sqr.genes+1, sqr.genes+2),
+                      splitrule = c("gini", "extratrees"),
+                      min.node.size = 1)
+trees <- seq(500, 2000, 500) 
+
+rf.cv.10 <- list() # lista vacia para meter los resultados de cada bucle
+for (tree in trees){ # bucle en cada pasada hace un modelo con un número de arboles distintos
+  modelo <- train(class ~., data=mat_exp_alz_genes.RF,
+                  method="ranger",
+                  tuneGrid=mygrid,
+                  trControl=RFControl, 
+                  ntree = tree,
+                  # metric = "BalancedAccuracy",
+                  importance = "permutation" # o impurity permutation https://arxiv.org/abs/1407.7502
+  )
+  rf.cv.10[[paste(tree, "trees")]] <- modelo # metemos el modelo en la lista
+}
+```
+
+```{r, fig.width=8, fig.height= 5}
+
+# Hacemos dataframe con las métricas de cada modelo
+datos_combinados <- rbind(
+  data.frame(mtry = rf.cv.10$`500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`500 trees`$results$BalancedAccuracy, Trees = "500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1000 trees`$results$BalancedAccuracy, Trees = "1000 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`1500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1500 trees`$results$BalancedAccuracy, Trees = "1500 trees", Metric = "Balanced Accuracy"),
+  data.frame(mtry = rf.cv.10$`2000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`2000 trees`$results$BalancedAccuracy, Trees = "2000 trees", Metric = "Balanced Accuracy")
+)
+
+datos_combinados$Trees <- factor(datos_combinados$Trees, levels = c("500 trees", "1000 trees", "1500 trees", "2000 trees"))
+
+datos_combinados %>%
+  # filter(splitrule == "extratrees") %>%
+  filter(Metric == "Balanced Accuracy") %>%
+  ggplot(aes(x = mtry, y = MetricValue, color = Trees)) +
+  geom_point(size = 4) +
+  geom_line(linetype = "dashed") +
+  theme_minimal() +
+  labs(x = "Mtry", y = "Precisión balanceada", title = "Entrenamiento RF") +
+  facet_wrap(~ splitrule) +
+  scale_color_manual(values = c("#C19A6B", "#A3C9A8", "#5B9279", "#264E36"))
+```
+
+```{r}
+models <- resamples(rf.cv.10)
+
+summary(models)
+
+bwplot(models)
+```
+
+## Genes más importantes según RF
+
+```{r}
+important.genes.umap1pos <- varImp(rf.cv.10$`2000 trees`)$importance %>% 
+  rownames_to_column() %>%
+  arrange(desc(Overall))
+
+reactable(important.genes.umap1pos)
+```
+
+## Particón infra y sobre-expresados
+
+```{r}
+medianas_por_clase <- aggregate(. ~ class, data = mat_exp_alz_genes.RF, FUN = median)
+
+medianas_clase_0 <- medianas_por_clase[medianas_por_clase$class == 0, ]
+medianas_clase_1 <- medianas_por_clase[medianas_por_clase$class == 1, ]
+
+genes_upregulados <- colnames(mat_exp_alz_genes.RF)[sapply(colnames(mat_exp_alz_genes.RF), function(gene) {
+  if (gene != "class") {
+    return(medianas_clase_1[[gene]] > medianas_clase_0[[gene]])
+  } else {
+    return(FALSE)
+  }
+})]
+
+genes_downregulados <- colnames(mat_exp_alz_genes.RF)[sapply(colnames(mat_exp_alz_genes.RF), function(gene) {
+  if (gene != "class") {
+    return(medianas_clase_1[[gene]] < medianas_clase_0[[gene]])
+  } else {
+    return(FALSE)
+  }
+})]
+
+```
+
+# Guardar
+
+```{r}
+save.image("Detección variables biologicas importante mediante RF.RData")
+```

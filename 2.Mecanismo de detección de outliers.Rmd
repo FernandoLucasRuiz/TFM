@@ -1,0 +1,324 @@
+---
+title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
+subtitle: "Mecanismo de detección de outliers"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+# Cargar los datos del mecanismo de filtrado
+
+```{r}
+load("mecanismo de filtrado.RData")
+```
+
+
+# Mecanismo de detección de outliers 
+
+## PCA
+
+```{r}
+pca_KEGG <- prcomp(mat_exp_alz_genes)
+```
+
+```{r}
+# Scree plot con los datos escalados
+var_exp <- pca_KEGG$sdev^2
+prop_var_exp <- var_exp / sum(var_exp)
+cum_var_exp <- cumsum(prop_var_exp)
+
+df_var_exp <- data.frame(Comp = 1:length(prop_var_exp), VarExp = prop_var_exp)
+df_cum_var_exp <- data.frame(Comp = 1:length(cum_var_exp), CumVarExp = cum_var_exp)
+
+ggplot(df_var_exp[1:20,], aes(x = Comp, y = VarExp)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  geom_line(aes(group = 1), color = "blue") +
+  geom_point(color = "blue") +
+  theme_minimal() +
+  labs(x = "Principal components", y = "Variance", title = "Scree Plot scaled") +
+  ylim(c(0,1)) +
+  geom_line(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), color="#8B1A1A") +
+  geom_point(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), color = "red") +
+  geom_bar(data = df_cum_var_exp[1:20,], aes(x = Comp, y = CumVarExp), stat = "identity", fill = "red", alpha= 0.25) +
+  annotate("text", x = 4, y = 0.85, label = "Cumulative Scree Plot", color = "#8B1A1A", size = 4) +
+  geom_text(data = df_cum_var_exp[seq(0,20,2),], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
+```
+
+### Seleccionar muestras extremas para las dos primeras PC
+
+Selecciono los outliers de las dos primeras PC con el doble de SD.
+
+```{r}
+outlierspc1 <- as.data.frame(pca_KEGG$x[abs(pca_KEGG$x[,1]) > 1.5*(pca_KEGG$sdev[1]),1])
+
+outlierspc2 <- as.data.frame(pca_KEGG$x[abs(pca_KEGG$x[,2]) > 1.5*(pca_KEGG$sdev[2]),2])
+```
+
+```{r}
+df <- as.data.frame(pca_KEGG$x)
+
+plot1.pca <- ggplot(df, aes(x = PC1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean(df$PC1) + 1.5*pca_KEGG$sdev[1], linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(df$PC1) - 1.5*pca_KEGG$sdev[1], linetype = "dashed", color = "blue") +
+  labs(title = "Densidad PC1", y = "", x = "PC1") +
+  geom_text(data = outlierspc1, 
+            aes(x = outlierspc1[,1], y= 0, label = rownames(outlierspc1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(pca_KEGG$x), aes(x= PC1, y = 0), color= ifelse(abs(pca_KEGG$x[,1]) > 1.5*(pca_KEGG$sdev[1]), "#8B1A1A", "grey")) +
+  theme_minimal()
+
+plot2.pca <- ggplot(df, aes(x = PC2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean(df$PC2) + 1.5*pca_KEGG$sdev[2], linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean(df$PC2) - 1.5*pca_KEGG$sdev[2], linetype = "dashed", color = "blue") +
+  labs(title = "Densidad PC2", y = "", x = "PC2") +
+  geom_text(data = outlierspc2, 
+            aes(x = outlierspc2[,1], y= 0, label = rownames(outlierspc2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(pca_KEGG$x), aes(x= PC2, y = 0), color= ifelse(abs(pca_KEGG$x[,2]) > 1.5*(pca_KEGG$sdev[2]), "#8B1A1A", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1.pca, plot2.pca, ncol = 1)
+```
+
+```{r}
+mPC1.pos <- rownames(outlierspc1[outlierspc1[, 1] > 0 , , drop = F])
+mPC1.neg <- rownames(outlierspc1[outlierspc1[, 1] < 0 , , drop = F ])
+
+mPC2.pos <- rownames(outlierspc2[outlierspc2[, 1] > 0 , , drop = F ])
+mPC2.neg <- rownames(outlierspc2[outlierspc2[, 1] < 0 , , drop = F])
+```
+
+Tabla outliers PCA
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(mPC1.pos),
+                  length(mPC1.neg),
+                  length(mPC2.pos), 
+                  length(mPC2.neg))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_mPC1.pos <- c(mPC1.pos, rep("", max_length - length(mPC1.pos)))
+rownames_mPC1.neg <- c(mPC1.neg, rep("", max_length - length(mPC1.neg)))
+rownames_mPC2.pos <- c(mPC2.pos, rep("", max_length - length(mPC2.pos)))
+rownames_mPC2.neg <- c(mPC2.neg, rep("", max_length - length(mPC2.neg)))
+
+
+final_table <- data.frame(
+  mPC1.pos = rownames_mPC1.pos,
+  mPC1.neg = rownames_mPC1.neg,
+  mPC2.pos = rownames_mPC2.pos,
+  mPC2.neg = rownames_mPC2.neg
+)
+
+final_table
+
+```
+
+## tSNE
+
+```{r}
+set.seed(1234)
+tsne <- Rtsne(mat_exp_alz_genes, dims = 2, theta = 0.0)
+
+tsne.data <- as.data.frame(tsne$Y)
+row.names(tsne.data) <- row.names(mat_exp_alz_genes)
+tsne.data.covs <- merge(tsne.data, covs, by = "row.names")
+tsne.data.covs$Row.names <- NULL
+row.names(tsne.data.covs) <- tsne.data.covs$mrna_id
+```
+
+#### Seleccionamos outliers
+
+```{r}
+rownames(tsne.data) <- rownames(mat_exp_alz_genes)
+
+# Calcular la media y la desviación estándar para cada componente de t-SNE
+mean.tsne1 <- mean(tsne.data[,1])
+sd.tsne1 <- sd(tsne.data[,1])
+mean.tsne2 <- mean(tsne.data[,2])
+sd.tsne2 <- sd(tsne.data[,2])
+
+# Identificar muestras a más de 2 desviaciones estándar de la media
+outliers.tsne1 <- tsne.data[abs(tsne.data[,1] - mean.tsne1) > 1.5 * sd.tsne1, ]
+outliers.tsne2 <-tsne.data[abs(tsne.data[,2] - mean.tsne2) > 1.5 * sd.tsne2, ]
+```
+
+```{r, echo=F}
+plot1.tsne <- ggplot(tsne.data, aes(x = V1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.tsne1 + 1.5*sd.tsne1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.tsne1 - 1.5*sd.tsne1, linetype = "dashed", color = "blue") +
+  labs(title = "Densidad tSNE1", y = "", x = "tSNE1") +
+  geom_text(data = outliers.tsne1, 
+            aes(x = outliers.tsne1[,1], y= 0, label = rownames(outliers.tsne1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(tsne$Y), aes(x= V1, y = 0), color= ifelse(abs(tsne$Y[,1]) > 1.5*sd.tsne1, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+plot2.tsne <- ggplot(tsne.data, aes(x = V2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.tsne2 + 1.5*sd.tsne2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.tsne2 - 1.5*sd.tsne2, linetype = "dashed", color = "blue") +
+  labs(title = "Densidad tSNE2", y = "", y = "", x = "tSNE2") +
+  geom_text(data = outliers.tsne2, 
+            aes(x = outliers.tsne2[,2], y= 0, label = rownames(outliers.tsne2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(tsne$Y), aes(x= V2, y = 0), color= ifelse(abs(tsne.data[,2]) > 1.5*sd.tsne2, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1.tsne, plot2.tsne, ncol = 1)
+```
+
+```{r}
+mtSNE1.pos <- rownames(outliers.tsne1[outliers.tsne1[, 1] > 0, , drop = F])
+
+mtSNE1.neg <- rownames(outliers.tsne1[outliers.tsne1[, 1] < 0, , drop = F])
+
+mtSNE2.pos <- rownames(outliers.tsne2[outliers.tsne2[, 1] > 0, , drop = F])
+
+mtSNE2.neg <- rownames(outliers.tsne2[outliers.tsne2[, 1] < 0, , drop = F])
+```
+
+Tabla outliers tSNE
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(mtSNE1.pos),
+                  length(mtSNE1.neg),
+                  length(mtSNE2.pos), 
+                  length(mtSNE2.neg))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_mtSNE1.pos <- c(mtSNE1.pos, rep("", max_length - length(mtSNE1.pos)))
+rownames_mtSNE1.neg <- c(mtSNE1.neg, rep("", max_length - length(mtSNE1.neg)))
+rownames_mtSNE2.pos <- c(mtSNE2.pos, rep("", max_length - length(mtSNE2.pos)))
+rownames_mtSNE2.neg <- c(mtSNE2.neg, rep("", max_length - length(mtSNE2.neg)))
+
+
+final_table <- data.frame(
+  mtSNE1.pos = rownames_mtSNE1.pos,
+  mtSNE1.neg = rownames_mtSNE1.neg,
+  mtSNE2.pos = rownames_mtSNE2.pos,
+  mtSNE2.neg = rownames_mtSNE2.neg
+)
+
+final_table
+```
+
+## UMAP
+
+```{r}
+local.config <- umap.defaults
+# local.config$n_neighbors <- 4
+# local.config$n_components <- 2
+# local.config$n_epochs <- 100
+# local.config$metric<- "euclidean"
+set.seed(1234)
+umap.ad <- umap(mat_exp_alz_genes,random_stage=1234, local.config)
+
+umap.data <- as.data.frame(umap.ad$layout)
+row.names(umap.data) <- row.names(mat_exp_alz_genes)
+umap.data.covs <- merge(umap.data, covs, by = "row.names")
+umap.data.covs$Row.names <- NULL
+row.names(umap.data.covs) <- umap.data.covs$mrna_id
+```
+
+#### Seleccionamos outliers
+
+```{r}
+rownames(umap.data) <- rownames(mat_exp_alz_genes)
+
+# Calcular la media y la desviación estándar para cada componente de t-SNE
+mean.umap1 <- mean(umap.data[,1])
+sd.umap1 <- sd(umap.data[,1])
+mean.umap2 <- mean(umap.data[,2])
+sd.umap2 <- sd(umap.data[,2])
+
+# Identificar muestras a más de 2 desviaciones estándar de la media
+outliers.umap1 <- umap.data[abs(umap.data[,1] - mean.umap1) > 1.5 * sd.umap1, ]
+outliers.umap2 <-umap.data[abs(umap.data[,2] - mean.umap2) > 1.5 * sd.umap2, ]
+```
+
+```{r, echo=F}
+plot1.umap <- ggplot(umap.data, aes(x = V1)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.umap1 + 1.5*sd.umap1, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap1 - 1.5*sd.umap1, linetype = "dashed", color = "blue") +
+  labs(title = "Densidad UMAP1", y = "", x = "UMAP1") +
+  geom_text(data = outliers.umap1, 
+            aes(x = outliers.umap1[,1], y= 0, label = rownames(outliers.umap1)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V1, y = 0), color= ifelse(abs(umap.ad$layout[,1]) > 1.5*sd.umap1, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+plot2.umap <- ggplot(umap.data, aes(x = V2)) +
+  geom_density(fill = "#00CED1", alpha = 0.5) +
+  geom_vline(xintercept = mean.umap2 + 1.5*sd.umap2, linetype = "dashed", color = "blue") +
+  geom_vline(xintercept = mean.umap2 - 1.5*sd.umap2, linetype = "dashed", color = "blue") +
+  labs(title = "Densidad UMAP2", y = "", x = "UMAP2") +
+  geom_text(data = outliers.umap2, 
+            aes(x = outliers.umap2[,2], y= 0, label = rownames(outliers.umap2)), 
+            vjust = 1.5, hjust = 0, size = 3, color = "#E9965A", angle = 90, fontface= "bold") +
+  geom_rug(data = as.data.frame(umap.ad$layout), aes(x= V2, y = 0), color= ifelse(abs(umap.data[,2]) > 1.5*sd.umap2, "#8B1A1A", "grey")) +
+  theme_minimal()
+
+grid.arrange(plot1.umap, plot2.umap, ncol = 1)
+```
+
+```{r}
+mUMAP1.pos <- rownames(outliers.umap1[outliers.umap1[,1] > 0 , , drop = F])
+
+mUMAP1.neg <- rownames(outliers.umap1[outliers.umap1[,1] < 0 , , drop = F])
+
+mUMAP2.pos <- rownames(outliers.umap2[outliers.umap2[,1] > 0 , , drop = F])
+
+mUMAP2.neg <- rownames(outliers.umap2[outliers.umap2[,1] < 0 , , drop = F])
+```
+
+Tabla outliers UMAP
+
+```{r}
+# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+max_length <- max(length(mUMAP1.pos),
+                  length(mUMAP1.neg),
+                  length(mUMAP2.pos), 
+                  length(mUMAP2.neg))
+
+# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+rownames_mtSNE1.pos <- c(mUMAP1.pos, rep("", max_length - length(mUMAP1.pos)))
+rownames_mtSNE1.neg <- c(mUMAP1.neg, rep("", max_length - length(mUMAP1.neg)))
+rownames_mtSNE2.pos <- c(mUMAP2.pos, rep("", max_length - length(mUMAP2.pos)))
+rownames_mtSNE2.neg <- c(mUMAP2.neg, rep("", max_length - length(mUMAP2.neg)))
+
+
+final_table <- data.frame(
+  mUMAP1.pos = rownames_mtSNE1.pos,
+  mUMAP1.neg = rownames_mtSNE1.neg,
+  mUMAP2.pos = rownames_mtSNE2.pos,
+  mUMAP2.neg = rownames_mtSNE2.neg
+)
+
+final_table
+```
+
+```{r}
+save.image("mecanismo de deteccion de outliers.RData")
+```
+
