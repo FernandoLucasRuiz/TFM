@@ -1,6 +1,6 @@
 ---
-title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
-subtitle: "Mecanismo de detección outliers Proteosoma"
+title: "SELECTION OF RELEVANT SUBJECTS IN CLINICAL COHORTS WITH OMICS FOR TRANSLATIONAL APPLICATION"
+subtitle: "Outlier detection mechanism Proteosome"
 author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
 date: "`r Sys.Date()`"
 output:
@@ -20,15 +20,15 @@ output:
 knitr::opts_chunk$set(echo = T, warning = F, message = F)
 ```
 
-# Cargar los datos del mecanismo de deteccion de outliers
+# Load data
 
 ```{r}
-load("Mecanismo de anotación basado en diferencias biológicas.RData")
+load("Annotation mechanism based on biological differences.RData")
 ```
 
-# Cargando geneset de proteosoma de KEGG
+# Loading proteosome geneset from KEGG
 
-Entonces ahora cojo de KEGG el término hsa03050 de Proteasome y realizo los mismos pasos para extraer los outliers.
+So now I take from KEGG the Proteasome term hsa03050 and perform the same steps to extract the outliers.
 
 ```{r}
 # geneset de proteasome de kegg
@@ -41,9 +41,9 @@ paths <- getKEGGPathwayNames(species="hsa")
 geneset_proteasome <- tab$Symbol[tab$PathwayID=="hsa03050"]
 ```
 
-## Mecanismos de filtrado
+## Filtering mechanisms
 
-Filtrar la matriz Mnxm a Mnxm’, con m’ \<\< n para filtrar los predictores, en este caso de la matriz de expresión mat_exp.
+Filter the matrix Mnxm to Mnxm', with m' << n to filter the predictors, in this case from the expression matrix mat_exp.
 
 ```{r}
 mat_exp_proteosome_genes <- mat_exp[, colnames(mat_exp) %in% geneset_proteasome]
@@ -92,20 +92,16 @@ umap.ad <- umap(mat_exp_proteosome_genes,random_stage=1234, local.config)
 umap.data <- as.data.frame(umap.ad$layout)
 ```
 
-#### Seleccionamos outliers
-
-Vemos aquí que la "cola" de muestras más extremas ahora se observa en el UMAP2 negativo!
+#### We select outliers
 
 ```{r}
 rownames(umap.data) <- rownames(mat_exp_proteosome_genes)
 
-# Calcular la media y la desviación estándar para cada componente de t-SNE
 mean.umap1 <- mean(umap.data[,1])
 sd.umap1 <- sd(umap.data[,1])
 mean.umap2 <- mean(umap.data[,2])
 sd.umap2 <- sd(umap.data[,2])
 
-# Identificar muestras a más de 2 desviaciones estándar de la media
 outliers.umap1 <- umap.data[abs(umap.data[,1] - mean.umap1) > 1.5 * sd.umap1, ]
 outliers.umap2 <-umap.data[abs(umap.data[,2] - mean.umap2) > 1.5 * sd.umap2, ]
 ```
@@ -137,11 +133,11 @@ grid.arrange(plot1, plot2, ncol = 1)
 ```
 
 
-# Diferencia
+# Difference
 
-Ahora, vamos a ver las muestras que han sido detectados como casos extremos en ambos casos. Empezamos primero cogiendo todos los outliers ya sean casos o controles. Vemos que con el mUMAP1+ de ALZHEIMER hay 15 muestras que tambien están en los mUMAP2- del geneset de PROTEASOME.
+Now, let's look at the samples that have been detected as extreme cases in both cases. We start first by taking all the outliers whether they are cases or controls. We see that with the ALZHEIMER's mUMAP1+ there are 15 samples that are also in the mUMAP2- of the PROTEASOME geneset.
 
-## todas muestras
+## all samples
 
 ```{r}
 load("mi_entorno_EnrDif_Alz.RData")
@@ -175,7 +171,7 @@ upset(fromList(lista.outliers),
       text.scale = c(2, 1.3, 1, 1, 2, 1.7),
       queries = list(list(query = intersects, params = list("mUMAP1+ Alzheimer","mUMAP2- Proteasome"), color = "orange", active = T)),
       )
-# Agregar el título usando grid.text
+
 grid.text("Casos y controles", x = 0.2, y = 0.95, gp = gpar(fontsize = 18, fontface = "bold"))
 
 
@@ -206,17 +202,15 @@ venn.plot <- venn.diagram(
   main.pos = c(0.5, 0.95)
 )
 
-# Calcular la intersección
 interseccion_ABC <- Reduce(intersect, lista.outliers[c(2, 7)])
 
-# Dibuja el diagrama de Venn y el texto de la intersección
 grid.newpage()  # Asegura que el lienzo esté limpio
 grid.draw(venn.plot)
 ```
 
-## casos
+## cases
 
-Cuando filtramos por los outliers que son CASOS, vemos que pasa a ser la que más combinaciones tienen entre sí con 12 pacientes en común.
+When we filter by the outliers that are CASES, we see that it happens to be the one with the most combinations between them with 12 patients in common.
 
 ```{r}
 load("mi_entorno_EnrDif_Alz.RData")
@@ -250,7 +244,7 @@ upset(fromList(lista.outliers),
       text.scale = c(2, 1.3, 1, 1, 2, 1.3),
       queries = list(list(query = intersects, params = list("mUMAP1+ Alzheimer","mUMAP2- Proteasome"), color = "orange", active = T)),
       )
-# Agregar el título usando grid.text
+
 grid.text("Casos", x = 0.2, y = 0.95, gp = gpar(fontsize = 18, fontface = "bold"))
 ```
 
@@ -279,10 +273,8 @@ venn.plot <- venn.diagram(
   main.pos = c(0.5, 0.95)
 )
 
-# Calcular la intersección
 interseccion_ABC <- Reduce(intersect, lista.outliers[c(2, 7)])
 
-# Dibuja el diagrama de Venn y el texto de la intersección
 grid.newpage()  # Asegura que el lienzo esté limpio
 grid.draw(venn.plot)
 ```
