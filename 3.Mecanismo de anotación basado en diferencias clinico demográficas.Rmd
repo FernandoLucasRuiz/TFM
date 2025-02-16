@@ -1,5 +1,5 @@
 ---
-title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
+title: "SELECTION OF RELEVANT SUBJECTS IN CLINICAL COHORTS WITH OMICS FOR TRANSLATIONAL APPLICATION"
 subtitle: "Mecanismo de anotación basado en diferencias clinico demográficas"
 author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
 date: "`r Sys.Date()`"
