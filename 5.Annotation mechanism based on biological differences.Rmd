@@ -1,6 +1,6 @@
 ---
-title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
-subtitle: "Mecanismo de anotación basado en diferencias biológicas"
+title: "SELECTION OF RELEVANT SUBJECTS IN CLINICAL COHORTS WITH OMICS FOR TRANSLATIONAL APPLICATION"
+subtitle: “Annotation mechanism based on biological differences”
 author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
 date: "`r Sys.Date()`"
 output:
@@ -20,13 +20,13 @@ output:
 knitr::opts_chunk$set(echo = T, warning = F, message = F)
 ```
 
-# Cargar los datos del mecanismo de deteccion de outliers
+# Load data
 
 ```{r}
-load("Detección variables biologicas importante mediante RF.RData")
+load("Detection of important biological variables by RF.RData")
 ```
 
-# Todos genes
+# All genes
 
 ```{r}
 important.genes.top <- important.genes.umap1pos 
@@ -94,21 +94,6 @@ ggplot(df_long, aes(x = class, y = Expression, fill = class)) +
 ## GO
 
 ```{r}
-# matriz.AD.minus.important.genes <- mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname] %>%
-#   select(all_of(genes_upregulados))
-# 
-# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
-#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
-#                      organism = "hsapiens",
-#                      sources = "GO", 
-#                      multi_query = T,
-#                      highlight = T,
-#                      exclude_iea = T)
-# 
-# gostplot(gp_up_ordered, interactive = T, capped = T)
-```
-
-```{r}
 top_genes_umap1pos.gprofiler = gconvert(important.genes.top$rowname)
 top_genes_matriz.gprofiler = gconvert(colnames(mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname]))
 
@@ -174,17 +159,6 @@ enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "Gen
 
 ## KEGG
 
-```{r}
-# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
-#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
-#                      organism = "hsapiens",
-#                      sources = "KEGG", 
-#                      multi_query = T,
-#                      highlight = T)
-# 
-# gostplot(gp_up_ordered, interactive = T, capped = T)
-```
-
 ```{r, fig.height=10, fig.width=8}
 # enrichment analysis using gene names
 multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
@@ -241,17 +215,6 @@ enrichplot::dotplot(gp_mod_enrich, showCategory = 20, x = "Cluster", size = "Gen
 ```
 
 ## REAC
-
-```{r}
-# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
-#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
-#                      organism = "hsapiens",
-#                      sources = "REAC", 
-#                      multi_query = T,
-#                      highlight = T)
-# 
-# gostplot(gp_up_ordered, interactive = T, capped = T)
-```
 
 ```{r, fig.height=10, fig.width=8}
 # enrichment analysis using gene names
@@ -377,21 +340,6 @@ ggplot(df_long, aes(x = class, y = Expression, fill = class)) +
 
 ## GO
 
-```{r}
-# matriz.AD.minus.important.genes <- mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname] %>%
-#   select(all_of(genes_upregulados))
-# 
-# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
-#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
-#                      organism = "hsapiens",
-#                      sources = "GO", 
-#                      multi_query = T,
-#                      highlight = T,
-#                      exclude_iea = T)
-# 
-# gostplot(gp_up_ordered, interactive = T, capped = T)
-```
-
 ```{r, fig.height=10, fig.width=8}
 top_genes_umap1pos.gprofiler = gconvert(important.genes.top$rowname)
 top_genes_matriz.gprofiler = gconvert(colnames(mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname]))
@@ -464,17 +412,6 @@ p.go.sobre
 
 ## KEGG
 
-```{r}
-# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
-#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
-#                      organism = "hsapiens",
-#                      sources = "KEGG", 
-#                      multi_query = T,
-#                      highlight = T)
-# 
-# gostplot(gp_up_ordered, interactive = T, capped = T)
-```
-
 ```{r, fig.height=10, fig.width=8}
 # enrichment analysis using gene names
 multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
@@ -536,17 +473,6 @@ p.kegg.sobre
 ```
 
 ## REAC
-
-```{r}
-# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
-#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
-#                      organism = "hsapiens",
-#                      sources = "REAC", 
-#                      multi_query = T,
-#                      highlight = T)
-# 
-# gostplot(gp_up_ordered, interactive = T, capped = T)
-```
 
 ```{r, fig.height=10, fig.width=8}
 # enrichment analysis using gene names
@@ -677,20 +603,6 @@ ggplot(df_long, aes(x = class, y = Expression, fill = class)) +
 
 ## GO
 
-```{r}
-# matriz.AD.minus.important.genes <- mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname]
-# 
-# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
-#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
-#                      organism = "hsapiens",
-#                      sources = "GO", 
-#                      multi_query = T,
-#                      highlight = T,
-#                      exclude_iea = T)
-# 
-# gostplot(gp_up_ordered, interactive = T, capped = T)
-```
-
 ```{r, fig.height=10, fig.width=8}
 top_genes_umap1pos.gprofiler = gconvert(important.genes.top$rowname)
 top_genes_matriz.gprofiler = gconvert(colnames(mat_exp_alz_genes.RF[,!colnames(mat_exp_alz_genes.RF) %in% important.genes.top$rowname]))
@@ -763,17 +675,6 @@ p.go.infra
 
 ## KEGG
 
-```{r}
-# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
-#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
-#                      organism = "hsapiens",
-#                      sources = "KEGG", 
-#                      multi_query = T,
-#                      highlight = T)
-# 
-# gostplot(gp_up_ordered, interactive = T, capped = T)
-```
-
 ```{r, fig.height=10, fig.width=8}
 # enrichment analysis using gene names
 multi_gp = gost(list("mUMAP1pos genes" = top_genes_umap1pos.gprofiler$name,
@@ -836,17 +737,6 @@ p.kegg.infra
 
 
 ## REAC
-
-```{r}
-# gp_up_ordered = gost(list("mUMAP1pos genes" = important.genes.top$rowname, 
-#                           "Otros genes EA" = colnames(matriz.AD.minus.important.genes)) , 
-#                      organism = "hsapiens",
-#                      sources = "REAC", 
-#                      multi_query = T,
-#                      highlight = T)
-# 
-# gostplot(gp_up_ordered, interactive = T, capped = T)
-```
 
 ```{r, fig.height=10, fig.width=8}
 # enrichment analysis using gene names
@@ -912,5 +802,5 @@ p.reac.infra
 # Guardar
 
 ```{r}
-save.image("Mecanismo de anotación basado en diferencias biológicas.RData")
+save.image("Annotation mechanism based on biological differences.RData")
 ```
