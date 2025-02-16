@@ -1,0 +1,47 @@
+---
+title: "SELECTION OF RELEVANT SUBJECTS IN CLINICAL COHORTS WITH OMICS FOR TRANSLATIONAL APPLICATION"
+subtitle: "Librerias"
+author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+    highlight: kate
+    number_sections: true
+    theme: spacelab
+    toc: true
+    toc_float: true
+    code_folding: "hide"
+  pdf_document:
+    toc: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T, warning = F, message = F)
+```
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse) # Collection of packages for data science (includes ggplot2, dplyr, tidyr, readr, purrr, tibble)
+library(reshape) # Tools for data reshaping
+library(Hmisc) # Statistical summaries
+library(limma) # Analysis of gene expression data
+library(AnnotationDbi) # Interface for bioinformatics annotation databases
+library(org.Hs.eg.db) # Annotation data for human genes
+library(VennDiagram) # Generation of Venn diagrams 
+library(gridExtra) # Display multiple plots
+library(patchwork) # Combine multiple ggplots into a single plot
+library(ggrepel) # Improves text visualization in ggplots by avoiding text overlap
+library(Rtsne) # Implementation of t-SNE
+library(umap) # Implementation of UMAP
+library(ggVennDiagram) # Venn diagram plotting
+library(fastDummies)  # Perform one-hot encoding
+library(reactable) # Interactive tables
+library(factoextra) # For factor analysis and clustering visualization
+library(ggstatsplot) # For bar plots of contingency tables
+library(UpSetR) # For UpSet diagrams
+library(gprofiler2) # Functional enrichment analysis with g:Profiler
+library(clusterProfiler) # For functional enrichment analysis
+library(enrichplot) # Plots for enrichment analysis
+library(DOSE) # Required to convert to enrichResult object
+library(kableExtra) # For enhanced table formatting
+```
