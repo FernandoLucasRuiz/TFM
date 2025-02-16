@@ -1,6 +1,6 @@
 ---
 title: "SELECTION OF RELEVANT SUBJECTS IN CLINICAL COHORTS WITH OMICS FOR TRANSLATIONAL APPLICATION"
-subtitle: "Mecanismo de anotación basado en diferencias clinico demográficas"
+subtitle: "Annotation mechanism based on clinical diferences"
 author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
 date: "`r Sys.Date()`"
 output:
@@ -20,17 +20,17 @@ output:
 knitr::opts_chunk$set(echo = T, warning = F, message = F)
 ```
 
-# Cargar los datos del mecanismo de deteccion de outliers
+# Load data from the outlier detection mechanism
 
 ```{r}
-load("mecanismo de deteccion de outliers.RData")
+load("EXTREME SAMPLE DETECTION MECHANISM.RData")
 ```
 
-# Mecanismo de anotación basado en diferencias 
+# Annotation mechanism based on clinical diferences
 
-## Covariables en outliers 
+## Covariates in outliers 
 
-Tabla frecuencia outliers SANOS Y ENFERMOS con PCA
+Frequency table of HEALTHY AND SICK outliers with PCA
 
 ```{r}
 # PCA
@@ -58,29 +58,30 @@ data.frame(table(covs2$sampleset_PCA))
 
 ```
 
-Tabla frecuencia outliers SOLAMENTE ENFERMOS con PCA
+Frequency table outliers ONLY AD with PCA
 
 ```{r}
 data.frame(table(covs2$sampleset_PCA[covs2$neuroStatus == 1]))
 ```
 
 
-Tabla frecuencia outliers SANOS Y ENFERMOS con tSNE
+Frequency table of HEALTHY AND AD outliers with tSNE
+
 ```{r}
 #tsne
 
 for (i in rownames(covs2)){
   if (i %in% mtSNE1.pos){
-    covs2[i, "sampleset_tSNE"] <- "mtSNE1 positivo"
+    covs2[i, "sampleset_tSNE"] <- "mtSNE1 positive"
   }
   else if (i %in% mtSNE1.neg){
-    covs2[i, "sampleset_tSNE"] <- "mtSNE1 negativo"
+    covs2[i, "sampleset_tSNE"] <- "mtSNE1 negative"
   }
   else if (i %in% mtSNE2.pos){
-    covs2[i, "sampleset_tSNE"] <- "mtSNE2 positivo"
+    covs2[i, "sampleset_tSNE"] <- "mtSNE2 positive"
   }
   else if (i %in% mtSNE2.neg){
-    covs2[i, "sampleset_tSNE"] <- "mtSNE2 negativo"
+    covs2[i, "sampleset_tSNE"] <- "mtSNE2 negative"
   } else {
     covs2[i, "sampleset_tSNE"] <- "No outiler"
   }
@@ -90,7 +91,7 @@ covs2$sampleset_tSNE <- as.factor(covs2$sampleset_tSNE)
 data.frame(table(covs2$sampleset_tSNE))
 ```
 
-Tabla frecuencia outliers SOLAMENTE ENFERMOS con tSNE
+Frequency table outliers ONLY AD with tSNE
 ```{r}
 data.frame(table(covs2$sampleset_tSNE[covs2$neuroStatus == 1]))
 ```
@@ -101,16 +102,16 @@ Tabla frecuencia outliers SANOS Y ENFERMOS con UMAP
 
 for (i in rownames(covs2)){
   if (i %in% mUMAP1.pos){
-    covs2[i, "sampleset_UMAP"] <- "mUMAP1 positivo"
+    covs2[i, "sampleset_UMAP"] <- "mUMAP1 positive"
   }
   else if (i %in% mUMAP1.neg){
-    covs2[i, "sampleset_UMAP"] <- "mUMAP1 negativo"
+    covs2[i, "sampleset_UMAP"] <- "mUMAP1 negative"
   }
   else if (i %in% mUMAP2.pos){
-    covs2[i, "sampleset_UMAP"] <- "mUMAP2 positivo"
+    covs2[i, "sampleset_UMAP"] <- "mUMAP2 positive"
   }
   else if (i %in% mUMAP2.neg){
-    covs2[i, "sampleset_UMAP"] <- "mUMAP2 negativo"
+    covs2[i, "sampleset_UMAP"] <- "mUMAP2 negative"
   } else {
     covs2[i, "sampleset_UMAP"] <- "No outiler"
   }
@@ -119,7 +120,7 @@ for (i in rownames(covs2)){
 covs2$sampleset_UMAP <- as.factor(covs2$sampleset_UMAP)
 data.frame(table(covs2$sampleset_UMAP))
 ```
-Tabla frecuencia outliers SOLAMENTE ENFERMOS con UMAP
+Table frequency outliers ONLY AD with UMAP
 ```{r}
 data.frame(table(covs2$sampleset_UMAP[covs2$neuroStatus == 1]))
 ```
@@ -143,7 +144,7 @@ covs2 %>%
 
 ```
 
-## Fitrado de casos 
+## Case fitting 
 
 ```{r}
 covs2.casos <- covs2 %>%
@@ -154,9 +155,9 @@ reactable(covs2.casos)
 
 ## UMAP
 
-### CASOS
+### CASES
 
-#### Test estadistico
+#### Statistical test
 
 ```{r}
 calculo.test <- function(df.covs, sampleset){
@@ -211,7 +212,7 @@ calculo.test <- function(df.covs, sampleset){
             expected <- chisq.test(frecuencia)$expected
             
             if (any(expected <= 5)) {
-              # Obtener la posición del valor mínimo
+              # Obtain the position of the minimum value
               posicion_minimo <- which(frecuencia == min(frecuencia), arr.ind = TRUE)
               nombres.columnas <- colnames(frecuencia)
               nombres.filas <- rownames(frecuencia)
@@ -260,7 +261,7 @@ calculo.test <- function(df.covs, sampleset){
 }
 ```
 
-Calculo test estadistico
+Statistical test calculation
 
 ```{r,warning=FALSE}
 reactable(calculo.test(df.covs = covs2.casos, sampleset = "sampleset_UMAP"))
@@ -326,11 +327,11 @@ plot_list <- lapply(plots, ggplotGrob)
 grid.arrange(grobs = plot_list, ncol = 2)
 ```
 
-### Casos y sanos
+### Cases and healthy
 
-#### Test estadistico
+#### Statistical test
 
-Calculo test estadistico
+Statistical test calculation
 
 ```{r,warning=FALSE}
 reactable(calculo.test(df.covs = covs2, sampleset = "sampleset_UMAP"))
@@ -358,16 +359,10 @@ tests <- calculo.test(df.covs = covs2, sampleset = "sampleset_UMAP") %>%
 plots <- plot.pvalue.sig(df = covs2, test.df = tests)
 
 grid.arrange(plots$`cogdx_4 mUMAP1 positivo` , plots$`braaksc_5 mUMAP1 positivo`, plots$`ceradsc_4 mUMAP1 positivo`, plots$`ceradsc_2 mUMAP1 positivo`, plots$`cogdx_1 mUMAP1 positivo`, plots$`apoe_genotype_34 mUMAP1 positivo`, plots$`braaksc_3 mUMAP1 positivo`, ncol= 3)
-
-# plot_list <- lapply(plots, ggplotGrob)
-# 
-# grid.arrange(grobs = c(plot_list[1], plot_list[2], plot_list[3], plot_list[4]), ncol = 2)
-#   grid.arrange(grobs = c(plot_list[5], plot_list[6], plot_list[7], plot_list[8]), ncol = 2)
-#   grid.arrange(grobs = c(plot_list[9], plot_list[10]), ncol = 2)
 ```
 
 # Guardar
 
 ```{r}
-save.image("Mecanismo de anotación basado en diferencias clinico demográficas.RData")
+save.image("Annotation mechanism based on clinical diferences.RData")
 ```
