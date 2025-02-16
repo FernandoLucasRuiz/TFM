@@ -20,9 +20,9 @@ output:
 knitr::opts_chunk$set(echo = T, warning = F, message = F)
 ```
 
-# Leyendo datos
+# Reading data
 
-Descargar los datos. Escalo los datos de la matriz para tener homogeneidad en las representaciones.
+Downloading data. I scale the data in the matrix to have homogeneity in the representations.
 
 ```{r}
 # covariables
@@ -35,15 +35,15 @@ covs$ceradsc <- as.factor(covs$ceradsc)
 covs$cogdx <- as.factor(covs$cogdx)
 covs$neuroStatus <- as.factor(covs$neuroStatus)
 
-#datos corregidos 
+# Corrected data
 ROSMAP_RINPMIAGESEX_resids <- readRDS("~/Library/CloudStorage/OneDrive-UNIVERSIDADDEMURCIA/Documentos/Fernando/Master Bioinformatica/TFM/datos/ROSMAP_RINPMIAGESEX_resids.rds")
 mat_exp <- scale(ROSMAP_RINPMIAGESEX_resids)
 ```
 
-One-hot encoding de la matriz de covariables
+One-hot encoding of the covariate matrix
 
 ```{r}
-covs2 <- data.frame(matrix(ncol = 0, nrow = nrow(covs))) # Hago un dataframe vacio para meter los datos procesados
+covs2 <- data.frame(matrix(ncol = 0, nrow = nrow(covs))) 
 
 for (colname in names(covs)) {
   if (is.factor(covs[[colname]]) & length(levels(covs[[colname]])) > 2) {
@@ -63,7 +63,7 @@ for (colname in names(covs)) {
 rownames(covs2) <- covs2$mrna_id
 ```
 
-# Cargando geneset
+# Geneset
 
 ```{r}
 # geneset de Alzheimer extraidos de KEGG
@@ -76,9 +76,9 @@ geneset_alz <- tab$Symbol[tab$PathwayID=="hsa05010"]
 ```
 
 
-# Mecanismos de filtrado
+# Filtering mechanisms
 
-Filtrar la matriz Mnxm a Mnxm’, con m’ << n para filtrar los predictores, en este caso de la matriz de expresión mat_exp. 
+Filter the matrix Mnxm to Mnxm', with m' << n to filter out predictors, in this case from the expression matrix mat_exp. 
 
 ```{r}
 mat_exp_alz_genes <- mat_exp[, colnames(mat_exp) %in% geneset_alz]
@@ -87,33 +87,29 @@ mat_exp_alz_genes <- mat_exp[, colnames(mat_exp) %in% geneset_alz]
 ```{r, fig.height=4, fig.width=6}
 venn.plot <- venn.diagram(
   x = list(GenesMatriz = colnames(mat_exp), GenesetAlzheimer = geneset_alz),
-  category.names = c("Genes matriz transcriptómica", "Geneset EA\n KEGG"),
+  category.names = c("Genes of transcriptomic matrix", "Geneset AD\n KEGG"),
   filename = NULL,
-  output = FALSE,  # Asegura que no se exporte a un archivo
+  output = FALSE, 
   fill = c("#21908CFF", '#fde725ff'),
   cex = 1,  # Aumenta el tamaño del texto
   fontface = "bold",
-  cat.cex = 1,  # Aumenta el tamaño del texto de las categorías
+  cat.cex = 1, 
   cat.fontface = "bold",
   cat.default.pos = "text",
-  cat.pos = c(0, 20), #posicion de las categoricas
-  cat.dist = c(0.05, 0.1), #distancia de las categoricas
+  cat.pos = c(0, 20), 
+  cat.dist = c(0.05, 0.1),
   rotation.degree = 0, 
-  margin = 0.1, # hacerla más pequeña
+  margin = 0.1, 
   lwd=0.5,
-  lty = "dashed", # Estilo de línea discontinua
-  edge.col = "grey", # Color de los bordes
-  # main = "Nº de genes en matriz transcriptómica\n vs\n Nº de genes en geneset EA KEGG",
-  # main.fontface= "bold", 
-  # main.cex = 1.2,
-  # main.pos = c(0.5, 1)
+  lty = "dashed", 
+  edge.col = "grey", 
 )
 
-grid.newpage()  # Asegura que el lienzo esté limpio
+grid.newpage() 
 grid.draw(venn.plot)
 ```
 
 ```{r}
-save.image("mecanismo de filtrado.RData")
+save.image("filterinf mechanism.RData")
 ```
 
