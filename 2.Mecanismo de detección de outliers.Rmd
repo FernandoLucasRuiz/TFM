@@ -23,7 +23,7 @@ knitr::opts_chunk$set(echo = T, warning = F, message = F)
 # Cargar los datos del mecanismo de filtrado
 
 ```{r}
-load("mecanismo de filtrado.RData")
+load("filtering mechanism.RData")
 ```
 
 
