@@ -110,6 +110,6 @@ grid.draw(venn.plot)
 ```
 
 ```{r}
-save.image("filterinf mechanism.RData")
+save.image("filtering mechanism.RData")
 ```
 
