@@ -1,6 +1,6 @@
 ---
-title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
-subtitle: "Detección variables biologicas importante mediante RF"
+title: "SELECTION OF RELEVANT SUBJECTS IN CLINICAL COHORTS WITH OMICS FOR TRANSLATIONAL APPLICATION"
+subtitle: "Detection of important biological variables by RF"
 author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
 date: "`r Sys.Date()`"
 output:
@@ -20,10 +20,10 @@ output:
 knitr::opts_chunk$set(echo = T, warning = F, message = F)
 ```
 
-# Cargar los datos del mecanismo de deteccion de outliers
+# Load data 
 
 ```{r}
-load("Mecanismo de anotación basado en diferencias clinico demográficas.RData")
+load("Annotation mechanism based on clinical diferences.RData")
 ```
 
 # UMAP
@@ -71,7 +71,7 @@ ggplot(para.plot, aes_string(x = "umap1", y = "umap2", color = "sampleset_UMAP")
   geom_point(data= (covs2 %>% filter(neuroStatus == 0)), aes_string(x = "umap1", y = "umap2", color = "sampleset_UMAP"), alpha = 0.5) 
 ```
 
-## Seleccion genes importantes 
+## Selection of important genes 
 
 ```{r}
 estado <- rep(0, nrow(mat_exp_alz_genes))
@@ -98,10 +98,8 @@ registerDoParallel(cores=num_cores)
 modelLookup("ranger")
 ```
 
-Aquí he utilizado el parámetro importance = "permutation"
-
 ```{r}
-# Definir una función para calcular la Accuracy balanceada
+# Define a function to calculate the balanced Accuracy
 balanced_accuracy <- function(data, lev = NULL, model = NULL) {
   cm <- confusionMatrix(data$pred, data$obs)
   sensitivity <- cm$byClass["Sensitivity"]
@@ -110,7 +108,7 @@ balanced_accuracy <- function(data, lev = NULL, model = NULL) {
   c(BalancedAccuracy = balanced_acc)
 }
 
-# Definir las métricas de evaluación que queremos utilizar
+# Define the evaluation metrics we want to use
 RFControl <- trainControl(
   method = "cv", 
   number = 10,
@@ -129,8 +127,8 @@ mygrid <- expand.grid(mtry = c(sqr.genes - 2, sqr.genes - 1, sqr.genes, sqr.gene
                       min.node.size = 1)
 trees <- seq(500, 2000, 500) 
 
-rf.cv.10 <- list() # lista vacia para meter los resultados de cada bucle
-for (tree in trees){ # bucle en cada pasada hace un modelo con un número de arboles distintos
+rf.cv.10 <- list() 
+for (tree in trees){ 
   modelo <- train(class ~., data=mat_exp_alz_genes.RF,
                   method="ranger",
                   tuneGrid=mygrid,
@@ -145,7 +143,6 @@ for (tree in trees){ # bucle en cada pasada hace un modelo con un número de arb
 
 ```{r, fig.width=8, fig.height= 5}
 
-# Hacemos dataframe con las métricas de cada modelo
 datos_combinados <- rbind(
   data.frame(mtry = rf.cv.10$`500 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`500 trees`$results$BalancedAccuracy, Trees = "500 trees", Metric = "Balanced Accuracy"),
   data.frame(mtry = rf.cv.10$`1000 trees`$results$mtry, splitrule = rf.cv.10$`500 trees`$results$splitrule, MetricValue = rf.cv.10$`1000 trees`$results$BalancedAccuracy, Trees = "1000 trees", Metric = "Balanced Accuracy"),
@@ -156,7 +153,6 @@ datos_combinados <- rbind(
 datos_combinados$Trees <- factor(datos_combinados$Trees, levels = c("500 trees", "1000 trees", "1500 trees", "2000 trees"))
 
 datos_combinados %>%
-  # filter(splitrule == "extratrees") %>%
   filter(Metric == "Balanced Accuracy") %>%
   ggplot(aes(x = mtry, y = MetricValue, color = Trees)) +
   geom_point(size = 4) +
@@ -175,7 +171,7 @@ summary(models)
 bwplot(models)
 ```
 
-## Genes más importantes según RF
+## Most important genes according to RF
 
 ```{r}
 important.genes.umap1pos <- varImp(rf.cv.10$`2000 trees`)$importance %>% 
@@ -185,7 +181,7 @@ important.genes.umap1pos <- varImp(rf.cv.10$`2000 trees`)$importance %>%
 reactable(important.genes.umap1pos)
 ```
 
-## Particón infra y sobre-expresados
+## Under- and over-expressed particons
 
 ```{r}
 medianas_por_clase <- aggregate(. ~ class, data = mat_exp_alz_genes.RF, FUN = median)
@@ -214,5 +210,5 @@ genes_downregulados <- colnames(mat_exp_alz_genes.RF)[sapply(colnames(mat_exp_al
 # Guardar
 
 ```{r}
-save.image("Detección variables biologicas importante mediante RF.RData")
+save.image("Detection of important biological variables by RF.RData")
 ```
