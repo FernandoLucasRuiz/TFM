@@ -1,6 +1,6 @@
 ---
-title: "Selección de sujetos de interés en cohortes clínicas con ómica para aplicación traslacional"
-subtitle: "Mecanismo de detección de outliers"
+title: "SELECTION OF RELEVANT SUBJECTS IN CLINICAL COHORTS WITH OMICS FOR TRANSLATIONAL APPLICATION"
+subtitle: "EXTREME SAMPLE DETECTION MECHANISM"
 author: "Fernando Lucas Ruiz (fernando.lucas@um.es)"
 date: "`r Sys.Date()`"
 output:
@@ -20,14 +20,14 @@ output:
 knitr::opts_chunk$set(echo = T, warning = F, message = F)
 ```
 
-# Cargar los datos del mecanismo de filtrado
+# Load data from the filtering mechanism
 
 ```{r}
 load("filtering mechanism.RData")
 ```
 
 
-# Mecanismo de detección de outliers 
+# EXTREME SAMPLE DETECTION MECHANISM
 
 ## PCA
 
@@ -36,7 +36,6 @@ pca_KEGG <- prcomp(mat_exp_alz_genes)
 ```
 
 ```{r}
-# Scree plot con los datos escalados
 var_exp <- pca_KEGG$sdev^2
 prop_var_exp <- var_exp / sum(var_exp)
 cum_var_exp <- cumsum(prop_var_exp)
@@ -58,9 +57,9 @@ ggplot(df_var_exp[1:20,], aes(x = Comp, y = VarExp)) +
   geom_text(data = df_cum_var_exp[seq(0,20,2),], aes(x=Comp, y = CumVarExp +0.04, label = round(CumVarExp, 2)))
 ```
 
-### Seleccionar muestras extremas para las dos primeras PC
+### Select extreme samples for the first two pcs.
 
-Selecciono los outliers de las dos primeras PC con el doble de SD.
+I select the outliers of the first two PCs with double SD.
 
 ```{r}
 outlierspc1 <- as.data.frame(pca_KEGG$x[abs(pca_KEGG$x[,1]) > 1.5*(pca_KEGG$sdev[1]),1])
@@ -104,16 +103,14 @@ mPC2.pos <- rownames(outlierspc2[outlierspc2[, 1] > 0 , , drop = F ])
 mPC2.neg <- rownames(outlierspc2[outlierspc2[, 1] < 0 , , drop = F])
 ```
 
-Tabla outliers PCA
-
 ```{r}
-# Asegurarse de que todos son vectores del mismo largo para el dataframe final
+# Make sure that all vectors are the same length for the final dataframe.
 max_length <- max(length(mPC1.pos),
                   length(mPC1.neg),
                   length(mPC2.pos), 
                   length(mPC2.neg))
 
-# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
+# Normalize the length of the vectors (in case one of them is shorter)
 rownames_mPC1.pos <- c(mPC1.pos, rep("", max_length - length(mPC1.pos)))
 rownames_mPC1.neg <- c(mPC1.neg, rep("", max_length - length(mPC1.neg)))
 rownames_mPC2.pos <- c(mPC2.pos, rep("", max_length - length(mPC2.pos)))
@@ -144,18 +141,16 @@ tsne.data.covs$Row.names <- NULL
 row.names(tsne.data.covs) <- tsne.data.covs$mrna_id
 ```
 
-#### Seleccionamos outliers
+#### We select outliers
 
 ```{r}
 rownames(tsne.data) <- rownames(mat_exp_alz_genes)
 
-# Calcular la media y la desviación estándar para cada componente de t-SNE
 mean.tsne1 <- mean(tsne.data[,1])
 sd.tsne1 <- sd(tsne.data[,1])
 mean.tsne2 <- mean(tsne.data[,2])
 sd.tsne2 <- sd(tsne.data[,2])
 
-# Identificar muestras a más de 2 desviaciones estándar de la media
 outliers.tsne1 <- tsne.data[abs(tsne.data[,1] - mean.tsne1) > 1.5 * sd.tsne1, ]
 outliers.tsne2 <-tsne.data[abs(tsne.data[,2] - mean.tsne2) > 1.5 * sd.tsne2, ]
 ```
@@ -196,16 +191,12 @@ mtSNE2.pos <- rownames(outliers.tsne2[outliers.tsne2[, 1] > 0, , drop = F])
 mtSNE2.neg <- rownames(outliers.tsne2[outliers.tsne2[, 1] < 0, , drop = F])
 ```
 
-Tabla outliers tSNE
-
 ```{r}
-# Asegurarse de que todos son vectores del mismo largo para el dataframe final
 max_length <- max(length(mtSNE1.pos),
                   length(mtSNE1.neg),
                   length(mtSNE2.pos), 
                   length(mtSNE2.neg))
 
-# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
 rownames_mtSNE1.pos <- c(mtSNE1.pos, rep("", max_length - length(mtSNE1.pos)))
 rownames_mtSNE1.neg <- c(mtSNE1.neg, rep("", max_length - length(mtSNE1.neg)))
 rownames_mtSNE2.pos <- c(mtSNE2.pos, rep("", max_length - length(mtSNE2.pos)))
@@ -240,18 +231,16 @@ umap.data.covs$Row.names <- NULL
 row.names(umap.data.covs) <- umap.data.covs$mrna_id
 ```
 
-#### Seleccionamos outliers
+#### Select outliers
 
 ```{r}
 rownames(umap.data) <- rownames(mat_exp_alz_genes)
 
-# Calcular la media y la desviación estándar para cada componente de t-SNE
 mean.umap1 <- mean(umap.data[,1])
 sd.umap1 <- sd(umap.data[,1])
 mean.umap2 <- mean(umap.data[,2])
 sd.umap2 <- sd(umap.data[,2])
 
-# Identificar muestras a más de 2 desviaciones estándar de la media
 outliers.umap1 <- umap.data[abs(umap.data[,1] - mean.umap1) > 1.5 * sd.umap1, ]
 outliers.umap2 <-umap.data[abs(umap.data[,2] - mean.umap2) > 1.5 * sd.umap2, ]
 ```
@@ -292,16 +281,12 @@ mUMAP2.pos <- rownames(outliers.umap2[outliers.umap2[,1] > 0 , , drop = F])
 mUMAP2.neg <- rownames(outliers.umap2[outliers.umap2[,1] < 0 , , drop = F])
 ```
 
-Tabla outliers UMAP
-
 ```{r}
-# Asegurarse de que todos son vectores del mismo largo para el dataframe final
 max_length <- max(length(mUMAP1.pos),
                   length(mUMAP1.neg),
                   length(mUMAP2.pos), 
                   length(mUMAP2.neg))
 
-# Normalizar la longitud de los vectores (en caso de que alguno sea más corto)
 rownames_mtSNE1.pos <- c(mUMAP1.pos, rep("", max_length - length(mUMAP1.pos)))
 rownames_mtSNE1.neg <- c(mUMAP1.neg, rep("", max_length - length(mUMAP1.neg)))
 rownames_mtSNE2.pos <- c(mUMAP2.pos, rep("", max_length - length(mUMAP2.pos)))
@@ -319,6 +304,6 @@ final_table
 ```
 
 ```{r}
-save.image("mecanismo de deteccion de outliers.RData")
+save.image("EXTREME SAMPLE DETECTION MECHANISM.RData")
 ```
 
